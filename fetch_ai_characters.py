@@ -73,25 +73,25 @@ def build_char_prompts(char_id: str) -> dict:
     )
     return {
         "civilian": (
-            f"anime character portrait upper body, {civ_desc}, standing heroic pose, "
-            f"isolated on solid plain pure white background, sharp anime cel-shaded art style, clean lines, masterpiece",
+            f"3D CGI Unreal Engine 5 character render, upper body portrait, {civ_desc}, standing heroic pose, "
+            f"isolated on solid plain pure white background, octane render, PBR materials, studio lighting, masterpiece",
             512, 640, 600, 750, seed, True
         ),
         "armored": (
-            f"tokusatsu super sentai ranger warrior, sleek metallic {colors} armor, "
-            f"glowing black visor with sharp {motif} crest on helmet, heroic battle stance, "
-            f"isolated on solid plain pure white background, sharp anime cel-shaded art style, masterpiece",
+            f"3D CGI Unreal Engine 5 tokusatsu super sentai ranger warrior, sleek PBR metallic {colors} armor, "
+            f"glowing black visor with sharp {motif} crest on helmet, heroic battle stance, raytraced reflections, "
+            f"isolated on solid plain pure white background, octane render, masterpiece",
             512, 640, 600, 750, seed + 100, True
         ),
         "awakened": (
-            f"tokusatsu super sentai warrior upgraded awakened form, heavy {colors} and obsidian armor plates "
-            f"with glowing elemental {motif} energy aura and heavy shoulder pauldrons, "
-            f"isolated on solid plain pure white background, dynamic anime tokusatsu art, masterpiece",
+            f"3D CGI Unreal Engine 5 tokusatsu warrior upgraded awakened form, heavy {colors} and obsidian PBR armor plates "
+            f"with glowing volumetric {motif} energy aura and heavy shoulder pauldrons, "
+            f"isolated on solid plain pure white background, octane render, masterpiece",
             512, 640, 600, 750, seed + 200, True
         ),
         "eye_strip": (
-            f"extreme close up horizontal narrow strip of determined anime hero eyes glowing with {colors} {motif} energy, "
-            f"dramatic speed lines, intense tokusatsu anime cut-in frame, masterpiece",
+            f"3D CGI extreme close up horizontal narrow strip of determined hero eyes glowing with {colors} {motif} energy, "
+            f"dramatic volumetric light streaks, Unreal Engine 5 tokusatsu cut-in frame, masterpiece",
             768, 256, 960, 220, seed + 300, False
         ),
     }
