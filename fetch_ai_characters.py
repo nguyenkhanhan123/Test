@@ -106,7 +106,12 @@ def load_gpu_sd_pipe():
         torch_dtype=torch.float16,
         safety_checker=None,
     )
-    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
+    pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+        pipe.scheduler.config,
+        use_karras_sigmas=True,
+        algorithm_type="dpmsolver++",
+        final_sigmas_type="sigma_min",
+    )
     pipe = pipe.to("cuda")
     pipe.enable_attention_slicing()
     return pipe
