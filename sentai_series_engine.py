@@ -399,6 +399,12 @@ class CharacterSpriteSlot:
                 if is_speaking and vol > 0.12:
                     temp.alpha_composite(self.visor_glow)
 
+        if is_speaking and vol > 0.08:
+            zoom = 1.0 + 0.035 * min(1.0, vol)
+            nw, nh = int(temp.width * zoom), int(temp.height * zoom)
+            temp = temp.resize((nw, nh), Image.Resampling.BILINEAR)
+            pos = (pos[0] - (nw - self.base_open.width if self.custom_art is None else nw - self.custom_art.width) // 2, pos[1] - (nh - (self.base_open.height if self.custom_art is None else self.custom_art.height)))
+
         if not is_speaking:
             rgb = ImageEnhance.Brightness(temp.convert("RGB")).enhance(0.72)
             r, g, b = rgb.split()
@@ -606,12 +612,14 @@ def render_sentai_scene(
                     if p_idx > 0:
                         ImageDraw.Draw(canvas).line([(px0, 0), (px0, h)], fill=(255, 255, 255, 230), width=6)
             elif shot_type != "establishing":
+                enter_t = 1.0 - min(1.0, idx / 10.0)
+                slide_px = int((enter_t ** 2) * 140)
                 if left_slot:
-                    left_slot.render_to_canvas(canvas, (left_x, base_y + breath), idx, vol, is_speaking=(speaker_side == "left"))
+                    left_slot.render_to_canvas(canvas, (left_x - slide_px, base_y + breath), idx, vol, is_speaking=(speaker_side == "left"))
                 if right_slot:
-                    right_slot.render_to_canvas(canvas, (right_x, base_y + breath), idx, vol, is_speaking=(speaker_side == "right"))
+                    right_slot.render_to_canvas(canvas, (right_x + slide_px, base_y + breath), idx, vol, is_speaking=(speaker_side == "right"))
                 if center_slot:
-                    center_slot.render_to_canvas(canvas, (center_x, base_y + breath), idx, vol, is_speaking=True)
+                    center_slot.render_to_canvas(canvas, (center_x, base_y + breath + slide_px // 2), idx, vol, is_speaking=True)
 
             if shot_type in ("portrait_drama", "eye_cutin"):
                 draw_lower_third_tag(canvas, spk_cfg.get("display_name", ""), spk_cfg.get("role", ""), theme_rgb, mode)
