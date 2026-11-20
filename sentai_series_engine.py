@@ -591,11 +591,28 @@ def render_sentai_scene(
             breath = int(np.sin(idx * 0.15) * 3)
 
             if shot_type == "action_clash" and left_slot and right_slot:
-                dash_p = min(1.0, idx / (FPS * 0.35))
-                atk_x = int(60 + dash_p * (w * 0.24))
-                def_x = int(w - cw - 80 + (18 if idx >= 6 else 0))
-                right_slot.render_to_canvas(canvas, (def_x, base_y), idx, vol, is_speaking=False)
+                dash_p = min(1.0, idx / (FPS * 0.28))
+                atk_x = int(50 + (dash_p ** 0.6) * (w * 0.28))
+                hit_recoil = int(45 * max(0.0, 1.0 - (idx - 6) / 10.0)) if idx >= 6 else 0
+                def_x = int(w - cw - 80 + hit_recoil)
+                right_slot.render_to_canvas(canvas, (def_x, base_y - (hit_recoil // 3)), idx, vol, is_speaking=False)
                 left_slot.render_to_canvas(canvas, (atk_x, base_y), idx, vol, is_speaking=True)
+
+                # Hiệu ứng tia chém & tóe lửa va chạm tại khung hình 5..12
+                if 5 <= idx <= 12:
+                    fx = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                    dfx = ImageDraw.Draw(fx)
+                    cx_hit, cy_hit = w // 2 + 40, h // 2
+                    p_hit = (idx - 5) / 7.0
+                    rad = int(90 + p_hit * 240)
+                    dfx.line([(cx_hit - rad, cy_hit + rad // 2), (cx_hit + rad, cy_hit - rad // 2)], fill=(255, 255, 255, 235), width=14)
+                    dfx.line([(cx_hit - rad // 2, cy_hit - rad // 2), (cx_hit + rad // 2, cy_hit + rad // 2)], fill=(theme_rgb[0], theme_rgb[1], theme_rgb[2], 220), width=10)
+                    for ang in range(0, 360, 45):
+                        rx = cx_hit + int(np.cos(np.radians(ang)) * rad * 0.85)
+                        ry = cy_hit + int(np.sin(np.radians(ang)) * rad * 0.85)
+                        dfx.line([(cx_hit, cy_hit), (rx, ry)], fill=(255, 230, 120, int(220 * (1.0 - p_hit))), width=5)
+                    canvas.alpha_composite(fx)
+
                 if scene.get("impact_frame", True) and idx in (6, 7, 8):
                     canvas = apply_impact_frame(canvas, idx - 6)
             elif shot_type == "com_link" and split_slots:

@@ -285,8 +285,9 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Gào! Bầu không khí của Trái Đất thật yếu ớt! Dưới sức mạnh ban phát từ Hắc Châu, toàn bộ thành phố này sẽ hóa thành tro bụi!",
-          "shot_type": "portrait_drama",
-          "sfx": "explosion"
+          "shot_type": "stock_clip",
+          "sfx": "explosion",
+          "clip_name": "battle_villain_ambush.mp4"
         }
       ]
     },
@@ -307,7 +308,10 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Dừng tay lại ngay! Phân đội Cơ Động đã phong tỏa tuyến đường rút lui của ngươi rồi!"
+          "text": "Dừng tay lại ngay! Phân đội Cơ Động đã phong tỏa tuyến đường rút lui của ngươi rồi!",
+          "shot_type": "stock_clip",
+          "clip_name": "battle_brawl_city.mp4",
+          "sfx": "sword_slash"
         },
         {
           "bg_id": "bg_city_battle",
@@ -338,7 +342,10 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Khốn kiếp! Sóng xung kích của hắn mạnh quá, mình không thể áp sát được!"
+          "text": "Khốn kiếp! Sóng xung kích của hắn mạnh quá, mình không thể áp sát được!",
+          "shot_type": "stock_clip",
+          "clip_name": "battle_villain_ambush.mp4",
+          "sfx": "explosion"
         },
         {
           "bg_id": "bg_city_battle",
@@ -350,7 +357,10 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Súng laser tiêu chuẩn của học viện hoàn toàn bị lớp vỏ bọc sinh học Hắc Hóa phản lại! Đạn thường không thể xuyên thủng!"
+          "text": "Súng laser tiêu chuẩn của học viện hoàn toàn bị lớp vỏ bọc sinh học Hắc Hóa phản lại! Đạn thường không thể xuyên thủng!",
+          "shot_type": "stock_clip",
+          "clip_name": "battle_water_blast.mp4",
+          "sfx": "power_charge"
         },
         {
           "bg_id": "bg_city_battle",
@@ -451,8 +461,9 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Đây là... sức mạnh của Hỏa Phiến! Thủy Lam, Phong Lục, chúng ta cùng kích hoạt Nguyên Giáp thôi!",
-          "shot_type": "eye_cutin",
-          "sfx": "power_charge"
+          "shot_type": "stock_clip",
+          "sfx": "henshin",
+          "clip_name": "henshin_fire.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -465,8 +476,9 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Dòng chảy của Thủy Phiến đã hòa làm một với lý trí của tôi! Sẵn sàng biến thân!",
-          "shot_type": "eye_cutin",
-          "sfx": "power_charge"
+          "shot_type": "stock_clip",
+          "sfx": "henshin",
+          "clip_name": "henshin_water.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -479,8 +491,9 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Cơn gió tự do này sẽ thổi bay toàn bộ bóng tối của các ngươi!",
-          "shot_type": "eye_cutin",
-          "sfx": "power_charge"
+          "shot_type": "stock_clip",
+          "sfx": "henshin",
+          "clip_name": "henshin_wind.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -494,8 +507,8 @@
           "cut_in": false,
           "text": "NGUYÊN KHÍ KÍCH HOẠT — NGUYÊN GIÁP BIẾN THÂN!",
           "shot_type": "stock_clip",
-          "clip_name": "henshin_fire.mp4",
-          "sfx": "henshin"
+          "clip_name": "rollcall_explosion.mp4",
+          "sfx": "explosion"
         }
       ]
     },
@@ -559,12 +572,14 @@
           "flash_start": true,
           "cut_in": true,
           "text": "Dù hôm nay mới chỉ có ba người, ý chí của năm phân đội vẫn luôn hợp nhất! NGŨ HÀNH CHIẾN ĐỘI — GIÁP SƯ XUẤT KÍCH!",
-          "shot_type": "com_link",
+          "shot_type": "stock_clip",
           "panel_chars": [
             "hoa_do",
             "thuy_lam",
             "phong_luc"
-          ]
+          ],
+          "clip_name": "battle_brawl_city.mp4",
+          "sfx": "explosion"
         },
         {
           "bg_id": "bg_city_battle",
@@ -589,13 +604,14 @@
           "flash_start": false,
           "cut_in": false,
           "text": "Tốc độ bây giờ đã hoàn toàn khác rồi! Phong Toàn Trảm — cuốn bay lớp giáp ngoài của hắn đi!",
-          "shot_type": "action_clash",
+          "shot_type": "stock_clip",
           "attacker": "phong_luc",
           "attacker_state": "armor_base",
           "defender": "phu_giap",
           "defender_state": "armor_base",
           "impact_frame": true,
-          "sfx": "sword_slash"
+          "sfx": "sword_slash",
+          "clip_name": "battle_wind_slash.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -608,13 +624,14 @@
           "flash_start": false,
           "cut_in": false,
           "text": "Hắn mất thăng bằng rồi! Thủy Tiễn Xuyên Tâm — khóa chặt mọi đường rút lui!",
-          "shot_type": "action_clash",
+          "shot_type": "stock_clip",
           "attacker": "thuy_lam",
           "attacker_state": "armor_base",
           "defender": "phu_giap",
           "defender_state": "armor_base",
           "impact_frame": true,
-          "sfx": "sword_slash"
+          "sfx": "power_charge",
+          "clip_name": "battle_water_blast.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -627,13 +644,14 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Kết thúc tại đây thôi! HỎA LONG XUNG KÍCH QUYỀN!",
-          "shot_type": "action_clash",
+          "shot_type": "stock_clip",
           "attacker": "hoa_do",
           "attacker_state": "armor_base",
           "defender": "phu_giap",
           "defender_state": "armor_base",
           "impact_frame": true,
-          "sfx": "explosion"
+          "sfx": "explosion",
+          "clip_name": "battle_fire_punch.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -645,7 +663,10 @@
           "show_hud": false,
           "flash_start": true,
           "cut_in": false,
-          "text": "Aaaaa! Sức nóng này... Vỏ bọc Hắc Hóa đang tan chảy! Nhưng Quân Đoàn Hắc Thực sẽ không dừng lại đâu!"
+          "text": "Aaaaa! Sức nóng này... Vỏ bọc Hắc Hóa đang tan chảy! Nhưng Quân Đoàn Hắc Thực sẽ không dừng lại đâu!",
+          "shot_type": "stock_clip",
+          "clip_name": "gokai_slash_finisher.mp4",
+          "sfx": "explosion"
         }
       ]
     },
