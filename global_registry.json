@@ -1,0 +1,392 @@
+{
+  "series_title": "NGU HANH CHIEN DOI - NGUYEN GIOI GIAP SU",
+  "style_suffix": "cinematic anime tokusatsu background art, detailed sci-fi command center and dramatic battlefields, makoto shinkai lighting, 8k",
+  "characters": {
+    "hoa_do": {
+      "display_name": "HỎA ĐỎ (VIÊM LONG)",
+      "role": "Thủ khoa Phân đội Xung Kích - Đội trưởng",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "+2%",
+      "pitch": "+2Hz",
+      "sub_color": [
+        255,
+        85,
+        85
+      ],
+      "primary_rgb": [
+        220,
+        40,
+        40
+      ],
+      "awake_rgb": [
+        255,
+        110,
+        20
+      ],
+      "hair_rgb": [
+        40,
+        25,
+        25
+      ]
+    },
+    "thuy_lam": {
+      "display_name": "THỦY LAM (HẢI MINH)",
+      "role": "Thủ khoa Phân đội Chiến Thuật - Phó đội",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "-2%",
+      "pitch": "-4Hz",
+      "sub_color": [
+        90,
+        200,
+        255
+      ],
+      "primary_rgb": [
+        30,
+        115,
+        230
+      ],
+      "awake_rgb": [
+        140,
+        40,
+        220
+      ],
+      "hair_rgb": [
+        20,
+        35,
+        65
+      ]
+    },
+    "tho_vang": {
+      "display_name": "THỔ VÀNG (THẠCH CƯỜNG)",
+      "role": "Thủ khoa Phân đội Hộ Vệ - Tiên phong",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "-5%",
+      "pitch": "-8Hz",
+      "sub_color": [
+        255,
+        215,
+        70
+      ],
+      "primary_rgb": [
+        225,
+        175,
+        30
+      ],
+      "awake_rgb": [
+        160,
+        110,
+        20
+      ],
+      "hair_rgb": [
+        65,
+        45,
+        25
+      ]
+    },
+    "phong_luc": {
+      "display_name": "PHONG LỤC (PHONG VÂN)",
+      "role": "Thủ khoa Phân đội Trinh Sát",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "+6%",
+      "pitch": "+5Hz",
+      "sub_color": [
+        100,
+        245,
+        130
+      ],
+      "primary_rgb": [
+        35,
+        185,
+        85
+      ],
+      "awake_rgb": [
+        80,
+        255,
+        190
+      ],
+      "hair_rgb": [
+        25,
+        60,
+        40
+      ]
+    },
+    "loi_hong": {
+      "display_name": "LÔI HỒNG (LÔI NGỌC)",
+      "role": "Thủ khoa Phân đội Công Nghệ",
+      "voice": "vi-VN-HoaiMyNeural",
+      "rate": "+4%",
+      "pitch": "+4Hz",
+      "sub_color": [
+        255,
+        135,
+        220
+      ],
+      "primary_rgb": [
+        230,
+        65,
+        165
+      ],
+      "awake_rgb": [
+        190,
+        90,
+        255
+      ],
+      "hair_rgb": [
+        75,
+        30,
+        65
+      ]
+    },
+    "long_vu": {
+      "display_name": "LONG VŨ (LONG PHÁCH)",
+      "role": "Chiến binh thứ 6 - Thiên Tôn Tái Sinh",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "+0%",
+      "pitch": "-2Hz",
+      "sub_color": [
+        255,
+        235,
+        140
+      ],
+      "primary_rgb": [
+        235,
+        195,
+        65
+      ],
+      "awake_rgb": [
+        255,
+        250,
+        190
+      ],
+      "hair_rgb": [
+        220,
+        220,
+        235
+      ]
+    },
+    "chi_huy": {
+      "display_name": "CHỈ HUY BẠCH DƯƠNG",
+      "role": "Tổng Chỉ Huy A.E.G.I.S. (Quang Phiến)",
+      "voice": "vi-VN-HoaiMyNeural",
+      "rate": "-2%",
+      "pitch": "-3Hz",
+      "sub_color": [
+        220,
+        245,
+        255
+      ],
+      "primary_rgb": [
+        210,
+        225,
+        245
+      ],
+      "awake_rgb": [
+        255,
+        255,
+        255
+      ],
+      "hair_rgb": [
+        180,
+        195,
+        215
+      ]
+    },
+    "mac_khieu": {
+      "display_name": "ĐẠI TƯỚNG MẠC KHIÊU",
+      "role": "Thống lĩnh Quân Đoàn Hắc Thực (Hắc Châu)",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "-8%",
+      "pitch": "-14Hz",
+      "sub_color": [
+        200,
+        120,
+        255
+      ],
+      "primary_rgb": [
+        75,
+        25,
+        110
+      ],
+      "awake_rgb": [
+        180,
+        20,
+        90
+      ],
+      "hair_rgb": [
+        30,
+        15,
+        40
+      ]
+    },
+    "quai_vat_tuan": {
+      "display_name": "HẮC HÓA THÚ",
+      "role": "Chiến binh Quân Đoàn Hắc Thực",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "-6%",
+      "pitch": "-11Hz",
+      "sub_color": [
+        180,
+        190,
+        200
+      ],
+      "primary_rgb": [
+        85,
+        95,
+        105
+      ],
+      "awake_rgb": [
+        160,
+        40,
+        60
+      ],
+      "hair_rgb": [
+        40,
+        45,
+        50
+      ]
+    },
+    "phu_giap": {
+      "display_name": "CHIẾN BINH HẮC HÓA",
+      "role": "Quân Đoàn Hắc Thực - Tiền Phong",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "-5%",
+      "pitch": "-10Hz",
+      "sub_color": [
+        195,
+        150,
+        230
+      ],
+      "primary_rgb": [
+        90,
+        55,
+        115
+      ],
+      "awake_rgb": [
+        175,
+        45,
+        85
+      ],
+      "hair_rgb": [
+        45,
+        35,
+        55
+      ]
+    },
+    "narrator": {
+      "display_name": "NGƯỜI DẪN CHUYỆN",
+      "role": "Thuyết minh",
+      "voice": "vi-VN-NamMinhNeural",
+      "rate": "+0%",
+      "pitch": "-2Hz",
+      "sub_color": [
+        255,
+        255,
+        255
+      ],
+      "primary_rgb": [
+        200,
+        215,
+        235
+      ],
+      "awake_rgb": [
+        255,
+        255,
+        255
+      ],
+      "hair_rgb": [
+        60,
+        60,
+        60
+      ]
+    }
+  },
+  "backgrounds": {
+    "bg_yuan_world": {
+      "prompt": "alien crystal planet temple with giant glowing energy sphere floating in cosmic sky",
+      "seed": 1001
+    },
+    "bg_aegis_arena": {
+      "prompt": "futuristic military academy combat testing arena with spectator stands and holographic shields",
+      "seed": 1002
+    },
+    "bg_aegis_command": {
+      "prompt": "high tech defense headquarters command bridge with giant tactical world map screen and consoles",
+      "seed": 1003
+    },
+    "bg_aegis_lab": {
+      "prompt": "advanced sci-fi weapon forge laboratory with laser containment chambers and elemental cores",
+      "seed": 1004
+    },
+    "bg_city_ruins": {
+      "prompt": "modern metropolis street under attack with smoke, sparks and dramatic sunset sky",
+      "seed": 1005
+    },
+    "bg_city_battle": {
+      "prompt": "modern metropolis street under attack with smoke, sparks and dramatic sunset sky",
+      "seed": 1005
+    },
+    "bg_quarry_battle": {
+      "prompt": "epic rocky mountain quarry battlefield with dramatic dust clouds and sunlight beams",
+      "seed": 1006
+    },
+    "bg_quarry_wasteland": {
+      "prompt": "epic rocky mountain quarry wasteland battlefield with dramatic dust clouds and sunlight beams",
+      "seed": 1006
+    },
+    "bg_dark_fortress": {
+      "prompt": "sinister alien biomechanical fortress interior with glowing purple dark core in space",
+      "seed": 1007
+    },
+    "bg_mecha_sky": {
+      "prompt": "panoramic city skyline with towering clouds and lightning for giant robot battle",
+      "seed": 1008
+    }
+  },
+  "bgm_tracks": {
+    "bgm_daily": {
+      "file": "assets/bgm/bgm_daily.wav",
+      "duck_ratio": 6,
+      "vol": 0.22
+    },
+    "bgm_tension": {
+      "file": "assets/bgm/bgm_tension.wav",
+      "duck_ratio": 5,
+      "vol": 0.26
+    },
+    "bgm_crisis": {
+      "file": "assets/bgm/bgm_crisis.wav",
+      "duck_ratio": 8,
+      "vol": 0.2
+    },
+    "bgm_awakening": {
+      "file": "assets/bgm/bgm_awakening.wav",
+      "duck_ratio": 4,
+      "vol": 0.3
+    },
+    "bgm_awaken": {
+      "file": "assets/bgm/bgm_awakening.wav",
+      "duck_ratio": 4,
+      "vol": 0.3
+    },
+    "bgm_battle_rock": {
+      "file": "assets/bgm/bgm_battle_rock.wav",
+      "duck_ratio": 2,
+      "vol": 0.42
+    },
+    "bgm_mecha": {
+      "file": "assets/bgm/bgm_mecha.wav",
+      "duck_ratio": 2.5,
+      "vol": 0.38
+    },
+    "bgm_mecha_epic": {
+      "file": "assets/bgm/bgm_mecha.wav",
+      "duck_ratio": 2.5,
+      "vol": 0.38
+    },
+    "bgm_outro": {
+      "file": "assets/bgm/bgm_outro.wav",
+      "duck_ratio": 6,
+      "vol": 0.24
+    }
+  }
+}
