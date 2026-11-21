@@ -47,7 +47,7 @@ def main():
     )
     print("3/3 Đang chuyển model lên GPU T4...", flush=True)
     pipe = pipe.to("cuda")
-    pipe.enable_vae_slicing()
+    pipe.vae.enable_slicing()
 
     for fname, prompt in CLIPS.items():
         out_path = stock_dir / fname
