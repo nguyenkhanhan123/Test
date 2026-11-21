@@ -22,15 +22,21 @@ CLIPS = {
 
 
 def main():
+    import shutil
+    locks_dir = Path.home() / ".cache" / "huggingface" / "hub" / ".locks"
+    if locks_dir.exists():
+        shutil.rmtree(locks_dir, ignore_errors=True)
+
     if not torch.cuda.is_available():
-        print("⚠️ Không có GPU CUDA — bỏ qua bước tạo Stock Clips.")
+        print("⚠️ Không có GPU CUDA — bỏ qua bước tạo Stock Clips.", flush=True)
         return
 
     stock_dir = Path("assets/stock_clips")
     stock_dir.mkdir(parents=True, exist_ok=True)
 
-    print("Đang nạp AnimateDiff + DreamShaper-8 (3D CGI) trên GPU...")
+    print("1/3 Đang tải MotionAdapter (AnimateDiff)...", flush=True)
     adapter = MotionAdapter.from_pretrained("guoyww/animatediff-motion-adapter-v1-5-2", torch_dtype=torch.float16)
+    print("2/3 Đang nạp DreamShaper-8 (3D CGI)...", flush=True)
     pipe = AnimateDiffPipeline.from_pretrained(
         "Lykon/dreamshaper-8",
         motion_adapter=adapter,
@@ -39,6 +45,7 @@ def main():
     pipe.scheduler = DDIMScheduler.from_config(
         pipe.scheduler.config, beta_schedule="linear", clip_sample=False
     )
+    print("3/3 Đang chuyển model lên GPU T4...", flush=True)
     pipe = pipe.to("cuda")
     pipe.enable_vae_slicing()
 
