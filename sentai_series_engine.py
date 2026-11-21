@@ -117,19 +117,23 @@ def resolve_sfx(scene: dict, act_id: str):
 # ==============================================================================
 # 1. XỬ LÝ GIỌNG LỒNG TIẾNG TOKUSATSU (MŨ BẢO HIỂM / PHẢN DIỆN / BỘ ĐÀM)
 # ==============================================================================
-def process_tokusatsu_voice(raw_mp3: Path, final_wav: Path, voice_filter: str = "none"):
-    """Chuyển MP3 sang WAV 48kHz và áp dụng bộ lọc âm thanh đặc trưng Super Sentai."""
+def process_tokusatsu_voice(raw_mp3: Path, final_wav: Path, voice_filter: str = "none", pitch_scale: float = 1.0):
+    """Chuyển MP3 sang WAV 48kHz, chỉnh cao độ theo nhân vật và áp dụng bộ lọc Tokusatsu."""
     if final_wav.exists() and final_wav.stat().st_size > 1000:
         return
 
+    filters = []
+    if abs(pitch_scale - 1.0) > 0.01:
+        filters.append(f"asetrate=48000*{pitch_scale:.3f},aresample=48000,atempo={1.0/pitch_scale:.3f}")
+
     if voice_filter == "helmet":
-        af = "highpass=f=300,lowpass=f=3500,acompressor=threshold=-18dB:ratio=4,aecho=0.8:0.88:12:0.25"
+        filters.append("highpass=f=300,lowpass=f=3500,acompressor=threshold=-18dB:ratio=4,aecho=0.8:0.88:12:0.25")
     elif voice_filter == "villain":
-        af = "asetrate=24000*0.86,aresample=48000,aecho=0.8:0.85:35:0.35,acompressor"
+        filters.append("asetrate=48000*0.86,aresample=48000,aecho=0.8:0.85:35:0.35,acompressor")
     elif voice_filter == "radio":
-        af = "highpass=f=450,lowpass=f=3000,acompressor=threshold=-20dB:ratio=5"
-    else:
-        af = "anull"
+        filters.append("highpass=f=450,lowpass=f=3000,acompressor=threshold=-20dB:ratio=5")
+
+    af = ",".join(filters) if filters else "anull"
 
     subprocess.run(
         [FFMPEG_EXE, "-y", "-loglevel", "error", "-i", str(raw_mp3), "-af", af, "-ac", "1", "-ar", "48000", str(final_wav)],
@@ -194,7 +198,7 @@ async def generate_voice_and_ass(
                 await asyncio.to_thread(lambda: gTTS(text=text, lang="vi").save(str(raw_mp3)))
             await asyncio.sleep(0.15)
 
-        process_tokusatsu_voice(raw_mp3, proc_wav, voice_filter=voice_filter)
+        process_tokusatsu_voice(raw_mp3, proc_wav, voice_filter=voice_filter, pitch_scale=char_cfg.get("pitch_scale", 1.0))
         duration = MP3(str(raw_mp3)).info.length
         w, h = get_dims(mode)
 
@@ -204,10 +208,10 @@ async def generate_voice_and_ass(
 
         r, g, b = char_cfg.get("sub_color", [255, 255, 255])
         name_tag = char_cfg.get("display_name", "")
-        prefix = f"【{name_tag}】 " if name_tag and name_tag != "NGƯỜI DẪN CHUYỆN" else ""
+        prefix = f"[{name_tag}] " if name_tag and name_tag != "NGƯỜI DẪN CHUYỆN" else ""
 
         style = pysubs2.SSAStyle(
-            fontname="Arial",
+            fontname="DejaVu Sans",
             fontsize=54 if mode == "tiktok" else 46,
             bold=True,
             primarycolor=pysubs2.Color(r, g, b, 0),
@@ -272,12 +276,31 @@ def draw_eye_cutin_banner(canvas: Image.Image, char_id: str, theme_rgb: tuple, p
     return Image.alpha_composite(canvas, overlay)
 
 
+def _load_vn_font(size: int, bold: bool = False):
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        "arialbd.ttf" if bold else "arial.ttf",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                pass
+    try:
+        return ImageFont.truetype("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", size)
+    except Exception:
+        return ImageFont.load_default()
+
+
 def draw_lower_third_tag(canvas: Image.Image, display_name: str, role_text: str, theme_rgb: tuple, mode: str):
     """Vẽ bảng tên nhân vật hiện đại ở góc dưới bên trái trong các cảnh diễn xuất."""
     if not display_name or display_name == "NGƯỜI DẪN CHUYỆN":
         return
     w, h = canvas.size
-    box_w, box_h = (520, 86) if mode == "youtube" else (580, 92)
+    box_w, box_h = (560, 88) if mode == "youtube" else (620, 94)
     x0, y0 = (45, h - 220) if mode == "youtube" else (40, h - 420)
 
     tag_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -286,12 +309,8 @@ def draw_lower_third_tag(canvas: Image.Image, display_name: str, role_text: str,
     d.polygon([(x0, y0), (x0 + box_w, y0), (x0 + box_w - 30, y0 + box_h), (x0, y0 + box_h)], fill=(15, 20, 32, 215))
     d.rectangle([x0, y0, x0 + 12, y0 + box_h], fill=(r, g, b, 255))
 
-    try:
-        f_main = ImageFont.truetype("arialbd.ttf", 26)
-        f_sub = ImageFont.truetype("arial.ttf", 19)
-    except Exception:
-        f_main = ImageFont.load_default()
-        f_sub = ImageFont.load_default()
+    f_main = _load_vn_font(25, bold=True)
+    f_sub = _load_vn_font(18, bold=False)
 
     d.text((x0 + 26, y0 + 12), display_name, fill=(255, 255, 255, 255), font=f_main)
     d.text((x0 + 26, y0 + 48), role_text, fill=(min(255, r + 90), min(255, g + 90), min(255, b + 90), 240), font=f_sub)

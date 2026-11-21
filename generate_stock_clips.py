@@ -6,6 +6,12 @@ from diffusers.utils import export_to_video
 
 
 CLIPS = {
+    "intro_nguyen_gioi.mp4": "3D CGI Unreal Engine 5 ancient crystalline alien planet shattering in deep space, giant glowing energy sphere exploding into cosmic wormhole, epic sci-fi 3D movie, masterpiece",
+    "aegis_command_briefing.mp4": "3D CGI Unreal Engine 5 high tech military defense command center bridge with glowing holographic world map screens, female commander briefing cadets, cinematic camera pan, masterpiece",
+    "aegis_arena_training.mp4": "3D CGI Unreal Engine 5 futuristic military academy combat arena, five young armored cadets training with holographic shields and energy sparks, dynamic camera orbit, masterpiece",
+    "aegis_lab_forge.mp4": "3D CGI Unreal Engine 5 advanced sci-fi weapon forge laboratory with glowing elemental cores in laser containment chambers, volumetric light rays, masterpiece",
+    "villain_throne_dark.mp4": "3D CGI Unreal Engine 5 sinister alien biomechanical space fortress interior, dark armored warlord standing before glowing purple energy core, menacing atmosphere, masterpiece",
+    "hero_team_gathering.mp4": "3D CGI Unreal Engine 5 five colorful armored sentai heroes standing together on cliff overlooking city at sunset, capes and energy aura flowing, cinematic 3D movie, masterpiece",
     "battle_brawl_city.mp4": "3D CGI Unreal Engine 5 tokusatsu super sentai rangers in red blue green PBR metallic armor fighting dark biomechanical monsters in ruined city street, dynamic martial arts kicks, punches, raytraced sparks flying, cinematic 3D movie, masterpiece",
     "battle_villain_ambush.mp4": "3D CGI Unreal Engine 5 menacing dark armored alien monster unleashing purple volumetric shockwave energy blast in city ruins, debris flying, dramatic 3D tokusatsu battle, masterpiece",
     "battle_wind_slash.mp4": "3D CGI Unreal Engine 5 green armored sentai warrior leaping in mid-air performing high speed spinning kick and slashing with emerald energy blade tornado, raytraced sparks exploding, masterpiece",

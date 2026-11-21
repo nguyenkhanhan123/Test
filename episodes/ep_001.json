@@ -50,8 +50,9 @@
           "flash_start": false,
           "cut_in": false,
           "text": "Mười hai năm trước, tại hành tinh Nguyên Giới xa xôi, quả cầu năng lượng Thiên Nguyên Hoàn từng duy trì hòa bình cho muôn loài.",
-          "shot_type": "establishing",
-          "sfx": "power_charge"
+          "shot_type": "stock_clip",
+          "sfx": "power_charge",
+          "clip_name": "intro_nguyen_gioi.mp4"
         },
         {
           "bg_id": "bg_nguyen_gioi_fall",
@@ -63,7 +64,9 @@
           "show_hud": false,
           "flash_start": true,
           "cut_in": false,
-          "text": "Thiên Nguyên Hoàn này phải thuộc về ta! Với nguồn sức mạnh vô tận này, cả vũ trụ sẽ phải quỳ gối dưới chân Mạc Khiêu!"
+          "text": "Thiên Nguyên Hoàn này phải thuộc về ta! Với nguồn sức mạnh vô tận này, cả vũ trụ sẽ phải quỳ gối dưới chân Mạc Khiêu!",
+          "shot_type": "stock_clip",
+          "clip_name": "villain_throne_dark.mp4"
         },
         {
           "bg_id": "bg_nguyen_gioi_fall",
@@ -76,8 +79,9 @@
           "flash_start": true,
           "cut_in": false,
           "text": "Để ngăn kẻ phản loạn, Đấng Tối Cao đã hy sinh thân mình đánh vỡ Thiên Nguyên Hoàn. Hắc Châu rơi vào tay Mạc Khiêu, còn các mảnh vỡ nguyên tố vượt hố đen rơi xuống Trái Đất.",
-          "shot_type": "establishing",
-          "sfx": "explosion"
+          "shot_type": "stock_clip",
+          "sfx": "explosion",
+          "clip_name": "intro_nguyen_gioi.mp4"
         },
         {
           "bg_id": "bg_aegis_arena",
@@ -89,7 +93,9 @@
           "show_hud": true,
           "flash_start": false,
           "cut_in": false,
-          "text": "Hôm nay, sau mười hai năm nghiên cứu năm mảnh vỡ lớn nhất, Học viện Phòng vệ A.E.G.I.S. chính thức bước vào vòng sát hạch chọn ra năm người kế thừa Nguyên Giáp!"
+          "text": "Hôm nay, sau mười hai năm nghiên cứu năm mảnh vỡ lớn nhất, Học viện Phòng vệ A.E.G.I.S. chính thức bước vào vòng sát hạch chọn ra năm người kế thừa Nguyên Giáp!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_arena_training.mp4"
         },
         {
           "bg_id": "bg_aegis_arena",
@@ -167,7 +173,9 @@
           "show_hud": true,
           "flash_start": false,
           "cut_in": false,
-          "text": "Các học viên ưu tú, các bạn không chiến đấu cho riêng mình mà mang trên vai niềm tin của hàng trăm đồng đội. Vòng sát hạch cuối cùng bắt đầu!"
+          "text": "Các học viên ưu tú, các bạn không chiến đấu cho riêng mình mà mang trên vai niềm tin của hàng trăm đồng đội. Vòng sát hạch cuối cùng bắt đầu!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_arena_training.mp4"
         }
       ]
     },
@@ -188,7 +196,9 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Mười hai năm qua, bầu khí quyển chết tiệt của Trái Đất đã thiêu rụi hàng vạn binh sĩ tiên phong của ta. Nhưng sự chờ đợi đã chấm dứt!"
+          "text": "Mười hai năm qua, bầu khí quyển chết tiệt của Trái Đất đã thiêu rụi hàng vạn binh sĩ tiên phong của ta. Nhưng sự chờ đợi đã chấm dứt!",
+          "shot_type": "stock_clip",
+          "clip_name": "villain_throne_dark.mp4"
         },
         {
           "bg_id": "bg_dark_fortress",
@@ -200,7 +210,9 @@
           "show_hud": false,
           "flash_start": true,
           "cut_in": false,
-          "text": "Với vỏ bọc sinh học kết hợp năng lượng Hắc Châu, tốp chiến binh Hắc Hóa đầu tiên đã sẵn sàng! Hãy xuống Trái Đất và đoạt lại toàn bộ mảnh vỡ cho ta!"
+          "text": "Với vỏ bọc sinh học kết hợp năng lượng Hắc Châu, tốp chiến binh Hắc Hóa đầu tiên đã sẵn sàng! Hãy xuống Trái Đất và đoạt lại toàn bộ mảnh vỡ cho ta!",
+          "shot_type": "stock_clip",
+          "clip_name": "villain_throne_dark.mp4"
         },
         {
           "bg_id": "bg_aegis_command",
@@ -231,7 +243,9 @@
           "show_hud": true,
           "flash_start": false,
           "cut_in": false,
-          "text": "Không thể nào! Cấu trúc sóng năng lượng này trùng khớp với dữ liệu về lõi Hắc Châu từ mười hai năm trước! Chúng đã tìm ra cách vượt qua tầng khí quyển rồi!"
+          "text": "Không thể nào! Cấu trúc sóng năng lượng này trùng khớp với dữ liệu về lõi Hắc Châu từ mười hai năm trước! Chúng đã tìm ra cách vượt qua tầng khí quyển rồi!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_command_briefing.mp4"
         },
         {
           "bg_id": "bg_aegis_command",
@@ -436,7 +450,9 @@
           "show_hud": true,
           "flash_start": true,
           "cut_in": false,
-          "text": "Nhìn biểu đồ cộng hưởng kìa! Lõi Hỏa Phiến, Thủy Phiến và Phong Phiến trong buồng chứa đang rung lên dữ dội theo nhịp tim của Hỏa Đỏ, Thủy Lam và Phong Lục!"
+          "text": "Nhìn biểu đồ cộng hưởng kìa! Lõi Hỏa Phiến, Thủy Phiến và Phong Phiến trong buồng chứa đang rung lên dữ dội theo nhịp tim của Hỏa Đỏ, Thủy Lam và Phong Lục!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_lab_forge.mp4"
         },
         {
           "bg_id": "bg_aegis_command",
@@ -448,7 +464,9 @@
           "show_hud": true,
           "flash_start": false,
           "cut_in": false,
-          "text": "Không cần kỳ sát hạch nào nữa! Chính tinh thần xả thân bảo vệ đồng loại đã chứng minh họ là những người xứng đáng nhất! Phóng ba bộ Nguyên Khí đầu tiên!"
+          "text": "Không cần kỳ sát hạch nào nữa! Chính tinh thần xả thân bảo vệ đồng loại đã chứng minh họ là những người xứng đáng nhất! Phóng ba bộ Nguyên Khí đầu tiên!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_command_briefing.mp4"
         },
         {
           "bg_id": "bg_city_battle",
@@ -705,7 +723,9 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Hỏa Đỏ, Thủy Lam và Phong Lục đều đã kích hoạt được Nguyên Giáp... Còn Thổ Phiến và Lôi Phiến của hai chúng ta vẫn im lìm..."
+          "text": "Hỏa Đỏ, Thủy Lam và Phong Lục đều đã kích hoạt được Nguyên Giáp... Còn Thổ Phiến và Lôi Phiến của hai chúng ta vẫn im lìm...",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_lab_forge.mp4"
         },
         {
           "bg_id": "bg_quarry_wasteland",
@@ -729,7 +749,9 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Đừng tự trách mình, Thổ Vàng, Lôi Hồng! Nếu hôm nay không có hai cậu liều mình che chắn cho lũ trẻ, bọn tớ đã không thể trụ vững đến lúc nhận được Giáp!"
+          "text": "Đừng tự trách mình, Thổ Vàng, Lôi Hồng! Nếu hôm nay không có hai cậu liều mình che chắn cho lũ trẻ, bọn tớ đã không thể trụ vững đến lúc nhận được Giáp!",
+          "shot_type": "stock_clip",
+          "clip_name": "hero_team_gathering.mp4"
         },
         {
           "bg_id": "bg_quarry_wasteland",
@@ -774,7 +796,9 @@
           "show_hud": true,
           "flash_start": false,
           "cut_in": false,
-          "text": "Chúc mừng các bạn đã đẩy lùi cuộc tập kích đầu tiên. Từ giờ phút này, năm đại diện ưu tú của A.E.G.I.S. chính thức mang danh hiệu Ngũ Hành Chiến Đội!"
+          "text": "Chúc mừng các bạn đã đẩy lùi cuộc tập kích đầu tiên. Từ giờ phút này, năm đại diện ưu tú của A.E.G.I.S. chính thức mang danh hiệu Ngũ Hành Chiến Đội!",
+          "shot_type": "stock_clip",
+          "clip_name": "aegis_command_briefing.mp4"
         },
         {
           "bg_id": "bg_aegis_command",
@@ -798,7 +822,9 @@
           "show_hud": false,
           "flash_start": false,
           "cut_in": false,
-          "text": "Ha ha, vậy hôm nay tôi khao cả đội một bữa thật no nê! Trước khi đợt tấn công tiếp theo ập tới, chúng ta phải chuẩn bị sẵn sàng cho cả năm người!"
+          "text": "Ha ha, vậy hôm nay tôi khao cả đội một bữa thật no nê! Trước khi đợt tấn công tiếp theo ập tới, chúng ta phải chuẩn bị sẵn sàng cho cả năm người!",
+          "shot_type": "stock_clip",
+          "clip_name": "hero_team_gathering.mp4"
         },
         {
           "bg_id": "bg_dark_fortress",
@@ -810,7 +836,9 @@
           "show_hud": false,
           "flash_start": true,
           "cut_in": false,
-          "text": "Thú vị lắm, lũ sâu kiến Trái Đất... Các ngươi đã đánh thức được ba mảnh vỡ rồi sao? Hãy tận hưởng chút bình yên ngắn ngủi đó đi, vì cơn ác mộng thực sự mới chỉ bắt đầu!"
+          "text": "Thú vị lắm, lũ sâu kiến Trái Đất... Các ngươi đã đánh thức được ba mảnh vỡ rồi sao? Hãy tận hưởng chút bình yên ngắn ngủi đó đi, vì cơn ác mộng thực sự mới chỉ bắt đầu!",
+          "shot_type": "stock_clip",
+          "clip_name": "villain_throne_dark.mp4"
         },
         {
           "bg_id": "bg_aegis_command",
@@ -823,7 +851,8 @@
           "flash_start": false,
           "cut_in": false,
           "text": "Đón xem Tập 2: Đôi Cánh Đại Địa Và Tia Chớp — khi Thổ Vàng và Lôi Hồng chính thức thức tỉnh Nguyên Giáp để hoàn thiện đội hình năm chiến binh!",
-          "shot_type": "establishing"
+          "shot_type": "stock_clip",
+          "clip_name": "hero_team_gathering.mp4"
         }
       ]
     }

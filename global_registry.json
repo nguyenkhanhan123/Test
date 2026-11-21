@@ -27,7 +27,8 @@
         40,
         25,
         25
-      ]
+      ],
+      "pitch_scale": 1.04
     },
     "thuy_lam": {
       "display_name": "THỦY LAM (HẢI MINH)",
@@ -54,7 +55,8 @@
         20,
         35,
         65
-      ]
+      ],
+      "pitch_scale": 0.94
     },
     "tho_vang": {
       "display_name": "THỔ VÀNG (THẠCH CƯỜNG)",
@@ -81,7 +83,8 @@
         65,
         45,
         25
-      ]
+      ],
+      "pitch_scale": 0.87
     },
     "phong_luc": {
       "display_name": "PHONG LỤC (PHONG VÂN)",
@@ -108,7 +111,8 @@
         25,
         60,
         40
-      ]
+      ],
+      "pitch_scale": 1.1
     },
     "loi_hong": {
       "display_name": "LÔI HỒNG (LÔI NGỌC)",
@@ -135,7 +139,8 @@
         75,
         30,
         65
-      ]
+      ],
+      "pitch_scale": 1.05
     },
     "long_vu": {
       "display_name": "LONG VŨ (LONG PHÁCH)",
@@ -162,7 +167,8 @@
         220,
         220,
         235
-      ]
+      ],
+      "pitch_scale": 0.91
     },
     "chi_huy": {
       "display_name": "CHỈ HUY BẠCH DƯƠNG",
@@ -189,7 +195,8 @@
         180,
         195,
         215
-      ]
+      ],
+      "pitch_scale": 0.95
     },
     "mac_khieu": {
       "display_name": "ĐẠI TƯỚNG MẠC KHIÊU",
@@ -216,7 +223,8 @@
         30,
         15,
         40
-      ]
+      ],
+      "pitch_scale": 0.88
     },
     "quai_vat_tuan": {
       "display_name": "HẮC HÓA THÚ",
@@ -243,7 +251,8 @@
         40,
         45,
         50
-      ]
+      ],
+      "pitch_scale": 0.86
     },
     "phu_giap": {
       "display_name": "CHIẾN BINH HẮC HÓA",
@@ -270,7 +279,8 @@
         45,
         35,
         55
-      ]
+      ],
+      "pitch_scale": 0.9
     },
     "narrator": {
       "display_name": "NGƯỜI DẪN CHUYỆN",
