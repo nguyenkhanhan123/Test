@@ -52,10 +52,17 @@ cy = 0.5 * (min(v.y for v in bbox) + max(v.y for v in bbox))
 char_obj.location = (-cx, -cy, -min_z)
 bpy.ops.object.transform_apply(location=True)
 
-# Giảm nhẹ lưới nếu quá dày (>50k mặt) để ARMATURE_AUTO bám xương chính xác
-if len(char_obj.data.polygons) > 50000:
+# Làm sạch đỉnh trùng & pháp tuyến + giảm lưới (<45k mặt) để ARMATURE_AUTO bám xương chính xác
+bpy.context.view_layer.objects.active = char_obj
+bpy.ops.object.mode_set(mode="EDIT")
+bpy.ops.mesh.select_all(action="SELECT")
+bpy.ops.mesh.remove_doubles(threshold=0.002)
+bpy.ops.mesh.normals_make_consistent(inside=False)
+bpy.ops.object.mode_set(mode="OBJECT")
+
+if len(char_obj.data.polygons) > 45000:
     dec = char_obj.modifiers.new(name="Decimate", type="DECIMATE")
-    dec.ratio = 50000.0 / len(char_obj.data.polygons)
+    dec.ratio = 45000.0 / len(char_obj.data.polygons)
     bpy.context.view_layer.objects.active = char_obj
     bpy.ops.object.modifier_apply(modifier=dec.name)
 
@@ -101,12 +108,46 @@ for side, s in [("L", 1), ("R", -1)]:
 
 bpy.ops.object.mode_set(mode="OBJECT")
 
-# Parent mesh with automatic weights
+# Parent mesh with automatic weights + nearest-bone fallback if heat weighting fails
 bpy.ops.object.select_all(action="DESELECT")
 char_obj.select_set(True)
 arm_obj.select_set(True)
 bpy.context.view_layer.objects.active = arm_obj
 bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+
+# Kiểm tra xem ARMATURE_AUTO có gán được trọng số không; nếu rỗng thì gán theo xương gần nhất
+has_weights = False
+for vg in char_obj.vertex_groups:
+    for v in char_obj.data.vertices[:min(200, len(char_obj.data.vertices))]:
+        try:
+            if vg.weight(v.index) > 0.01:
+                has_weights = True
+                break
+        except RuntimeError:
+            pass
+    if has_weights:
+        break
+
+if not has_weights:
+    print("⚠️ ARMATURE_AUTO không bám được weight, chuyển sang gán weight theo xương gần nhất...")
+    from mathutils.geometry import intersect_point_line
+    bone_segs = [(b.name, b.head_local.copy(), b.tail_local.copy()) for b in arm_obj.data.bones]
+    for bname, _, _ in bone_segs:
+        if bname not in char_obj.vertex_groups:
+            char_obj.vertex_groups.new(name=bname)
+    for v in char_obj.data.vertices:
+        p = v.co
+        best_name, best_d = "Hips", 1e9
+        for bname, h_pt, t_pt in bone_segs:
+            closest, fac = intersect_point_line(p, h_pt, t_pt)
+            if fac < 0.0:
+                closest = h_pt
+            elif fac > 1.0:
+                closest = t_pt
+            d = (p - closest).length
+            if d < best_d:
+                best_d, best_name = d, bname
+        char_obj.vertex_groups[best_name].add([v.index], 1.0, "REPLACE")
 
 # Keyframe a 96-frame (4s @ 24fps) heroic idle + right punch animation
 scene = bpy.context.scene
