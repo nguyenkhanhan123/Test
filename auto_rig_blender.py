@@ -100,7 +100,9 @@ for side, s in [("L", 1), ("R", -1)]:
     sh = add_bone(f"Shoulder_{side}", (0.05 * s, 0, 1.40), (0.16 * s, 0, 1.38), chest)
     ua = add_bone(f"UpperArm_{side}", (0.16 * s, 0, 1.38), (0.34 * s, 0, 1.18), sh)
     fa = add_bone(f"ForeArm_{side}", (0.34 * s, 0, 1.18), (0.50 * s, 0, 0.98), ua)
-    hd = add_bone(f"Hand_{side}", (0.50 * s, 0, 0.98), (0.58 * s, 0, 0.90), fa)
+    hd = add_bone(f"Hand_{side}", (0.50 * s, 0, 0.98), (0.56 * s, 0, 0.91), fa)
+    add_bone(f"Fingers_{side}", (0.56 * s, 0, 0.91), (0.60 * s, 0, 0.84), hd)
+    add_bone(f"Thumb_{side}", (0.52 * s, -0.02, 0.95), (0.55 * s, -0.05, 0.89), hd)
 
     th = add_bone(f"Thigh_{side}", (0.10 * s, 0, 0.90), (0.12 * s, 0, 0.50), hips)
     kn = add_bone(f"Shin_{side}", (0.12 * s, 0, 0.50), (0.12 * s, 0, 0.08), th)
@@ -167,11 +169,33 @@ def key_pose(frame, poses):
             pb[bname].rotation_euler = tuple(math.radians(a) for a in rot_deg)
             pb[bname].keyframe_insert(data_path="rotation_euler", frame=frame)
 
-key_pose(1, {"Chest": (0, 0, 0), "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "UpperArm_L": (0, 0, 0)})
-key_pose(24, {"Chest": (5, 0, 15), "UpperArm_R": (-35, 0, -25), "ForeArm_R": (-55, 0, 0), "UpperArm_L": (-20, 0, 20)})
-key_pose(48, {"Chest": (-8, 0, -22), "UpperArm_R": (-75, 0, 15), "ForeArm_R": (-10, 0, 0), "UpperArm_L": (-30, 0, 35)})
-key_pose(72, {"Chest": (5, 0, 15), "UpperArm_R": (-35, 0, -25), "ForeArm_R": (-55, 0, 0), "UpperArm_L": (-20, 0, 20)})
-key_pose(96, {"Chest": (0, 0, 0), "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "UpperArm_L": (0, 0, 0)})
+key_pose(1, {
+    "Chest": (0, 0, 0),
+    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "Fingers_R": (0, 0, 0),
+    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0), "Fingers_L": (0, 0, 0),
+})
+# Tư thế thủ võ: tay co ra phía trước (-Y), nắm đấm khép lại, không chạm vào thân
+key_pose(24, {
+    "Chest": (4, 0, -10),
+    "UpperArm_R": (-28, 0, -18), "ForeArm_R": (-65, 0, 0), "Fingers_R": (0, 0, 75),
+    "UpperArm_L": (-25, 0, 18), "ForeArm_L": (-55, 0, 0), "Fingers_L": (0, 0, -75),
+})
+# Tung cú đấm thẳng ra phía trước
+key_pose(48, {
+    "Chest": (6, 0, 18),
+    "UpperArm_R": (-78, 0, -12), "ForeArm_R": (-8, 0, 0), "Fingers_R": (0, 0, 85),
+    "UpperArm_L": (-18, 0, 22), "ForeArm_L": (-70, 0, 0), "Fingers_L": (0, 0, -75),
+})
+key_pose(72, {
+    "Chest": (4, 0, -10),
+    "UpperArm_R": (-28, 0, -18), "ForeArm_R": (-65, 0, 0), "Fingers_R": (0, 0, 75),
+    "UpperArm_L": (-25, 0, 18), "ForeArm_L": (-55, 0, 0), "Fingers_L": (0, 0, -75),
+})
+key_pose(96, {
+    "Chest": (0, 0, 0),
+    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "Fingers_R": (0, 0, 0),
+    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0), "Fingers_L": (0, 0, 0),
+})
 
 bpy.ops.object.mode_set(mode="OBJECT")
 
