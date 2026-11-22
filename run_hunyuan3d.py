@@ -15,6 +15,14 @@ try:
 except ImportError:
     sys.modules["bpy"] = types.ModuleType("bpy")
 
+class _DummyModel:
+    def __init__(self, *args, **kwargs):
+        pass
+    def enhance(self, img, outscale=4, **kwargs):
+        return img, None
+    def to(self, *args, **kwargs):
+        return self
+
 # Nếu thiếu basicsr/realesrgan trên Python 3.13, tạo stub an toàn để không chặn import
 for _mod in ("basicsr", "basicsr.archs", "basicsr.archs.rrdbnet_arch", "realesrgan"):
     if _mod not in sys.modules:
@@ -23,9 +31,9 @@ for _mod in ("basicsr", "basicsr.archs", "basicsr.archs.rrdbnet_arch", "realesrg
         except ImportError:
             m = types.ModuleType(_mod)
             if _mod.endswith("rrdbnet_arch"):
-                m.RRDBNet = object
+                m.RRDBNet = _DummyModel
             if _mod == "realesrgan":
-                m.RealESRGANer = object
+                m.RealESRGANer = _DummyModel
             sys.modules[_mod] = m
 
 import DifferentiableRenderer.mesh_utils as _mu

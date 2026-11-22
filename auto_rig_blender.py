@@ -52,6 +52,13 @@ cy = 0.5 * (min(v.y for v in bbox) + max(v.y for v in bbox))
 char_obj.location = (-cx, -cy, -min_z)
 bpy.ops.object.transform_apply(location=True)
 
+# Giảm nhẹ lưới nếu quá dày (>50k mặt) để ARMATURE_AUTO bám xương chính xác
+if len(char_obj.data.polygons) > 50000:
+    dec = char_obj.modifiers.new(name="Decimate", type="DECIMATE")
+    dec.ratio = 50000.0 / len(char_obj.data.polygons)
+    bpy.context.view_layer.objects.active = char_obj
+    bpy.ops.object.modifier_apply(modifier=dec.name)
+
 # Fix PBR plastic shine
 for mat in bpy.data.materials:
     if mat.use_nodes:
