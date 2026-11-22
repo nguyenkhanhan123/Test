@@ -1,10 +1,16 @@
 import gc
 import os
+import subprocess
 import sys
 import types
 import torch
 import trimesh
 from PIL import Image
+
+try:
+    import pytorch_lightning  # noqa: F401
+except ImportError:
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pytorch_lightning"], check=True)
 
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dshape")
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dpaint")
