@@ -100,9 +100,7 @@ for side, s in [("L", 1), ("R", -1)]:
     sh = add_bone(f"Shoulder_{side}", (0.05 * s, 0, 1.40), (0.16 * s, 0, 1.38), chest)
     ua = add_bone(f"UpperArm_{side}", (0.16 * s, 0, 1.38), (0.34 * s, 0, 1.18), sh)
     fa = add_bone(f"ForeArm_{side}", (0.34 * s, 0, 1.18), (0.50 * s, 0, 0.98), ua)
-    hd = add_bone(f"Hand_{side}", (0.50 * s, 0, 0.98), (0.56 * s, 0, 0.91), fa)
-    add_bone(f"Fingers_{side}", (0.56 * s, 0, 0.91), (0.60 * s, 0, 0.84), hd)
-    add_bone(f"Thumb_{side}", (0.52 * s, -0.02, 0.95), (0.55 * s, -0.05, 0.89), hd)
+    hd = add_bone(f"Hand_{side}", (0.50 * s, 0, 0.98), (0.58 * s, 0, 0.90), fa)
 
     th = add_bone(f"Thigh_{side}", (0.10 * s, 0, 0.90), (0.12 * s, 0, 0.50), hips)
     kn = add_bone(f"Shin_{side}", (0.12 * s, 0, 0.50), (0.12 * s, 0, 0.08), th)
@@ -151,12 +149,19 @@ if not has_weights:
                 best_d, best_name = d, bname
         char_obj.vertex_groups[best_name].add([v.index], 1.0, "REPLACE")
 
-# Keyframe a 96-frame (4s @ 24fps) heroic idle + right punch animation
+# Làm mượt trọng số xương để không bị khoét thân hoặc kéo tia nhọn ở khớp
+bpy.context.view_layer.objects.active = char_obj
+bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+bpy.ops.object.vertex_group_smooth(group_select_mode="ALL", factor=0.5, repeat=4)
+bpy.ops.object.mode_set(mode="OBJECT")
+
+# Keyframe a 96-frame (4s @ 24fps) heroic idle + outward-clear punch animation
 scene = bpy.context.scene
 scene.frame_start = 1
 scene.frame_end = 96
 scene.render.fps = 24
 
+bpy.context.view_layer.objects.active = arm_obj
 bpy.ops.object.mode_set(mode="POSE")
 pb = arm_obj.pose.bones
 for pb_item in pb:
@@ -170,31 +175,31 @@ def key_pose(frame, poses):
             pb[bname].keyframe_insert(data_path="rotation_euler", frame=frame)
 
 key_pose(1, {
-    "Chest": (0, 0, 0),
-    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "Fingers_R": (0, 0, 0),
-    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0), "Fingers_L": (0, 0, 0),
+    "Chest": (0, 0, 0), "Head": (0, 0, 0),
+    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0),
+    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0),
 })
-# Tư thế thủ võ: tay co ra phía trước (-Y), nắm đấm khép lại, không chạm vào thân
+# Tư thế thủ chiến đấu: 2 tay mở nhẹ ra ngoài và hướng về trước, không chạm thân
 key_pose(24, {
-    "Chest": (4, 0, -10),
-    "UpperArm_R": (-28, 0, -18), "ForeArm_R": (-65, 0, 0), "Fingers_R": (0, 0, 75),
-    "UpperArm_L": (-25, 0, 18), "ForeArm_L": (-55, 0, 0), "Fingers_L": (0, 0, -75),
+    "Chest": (3, 0, -5), "Head": (-3, 0, 5),
+    "UpperArm_R": (-20, 0, 15), "ForeArm_R": (-32, 0, 0),
+    "UpperArm_L": (-18, 0, -15), "ForeArm_L": (-28, 0, 0),
 })
-# Tung cú đấm thẳng ra phía trước
+# Tung cú đấm thẳng hướng về trước (-Y) & hơi chếch ra ngoài
 key_pose(48, {
-    "Chest": (6, 0, 18),
-    "UpperArm_R": (-78, 0, -12), "ForeArm_R": (-8, 0, 0), "Fingers_R": (0, 0, 85),
-    "UpperArm_L": (-18, 0, 22), "ForeArm_L": (-70, 0, 0), "Fingers_L": (0, 0, -75),
+    "Chest": (4, 0, 8), "Head": (-2, 0, -6),
+    "UpperArm_R": (-48, 0, 18), "ForeArm_R": (-8, 0, 0),
+    "UpperArm_L": (-15, 0, -20), "ForeArm_L": (-35, 0, 0),
 })
 key_pose(72, {
-    "Chest": (4, 0, -10),
-    "UpperArm_R": (-28, 0, -18), "ForeArm_R": (-65, 0, 0), "Fingers_R": (0, 0, 75),
-    "UpperArm_L": (-25, 0, 18), "ForeArm_L": (-55, 0, 0), "Fingers_L": (0, 0, -75),
+    "Chest": (3, 0, -5), "Head": (-3, 0, 5),
+    "UpperArm_R": (-20, 0, 15), "ForeArm_R": (-32, 0, 0),
+    "UpperArm_L": (-18, 0, -15), "ForeArm_L": (-28, 0, 0),
 })
 key_pose(96, {
-    "Chest": (0, 0, 0),
-    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0), "Fingers_R": (0, 0, 0),
-    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0), "Fingers_L": (0, 0, 0),
+    "Chest": (0, 0, 0), "Head": (0, 0, 0),
+    "UpperArm_R": (0, 0, 0), "ForeArm_R": (0, 0, 0),
+    "UpperArm_L": (0, 0, 0), "ForeArm_L": (0, 0, 0),
 })
 
 bpy.ops.object.mode_set(mode="OBJECT")
