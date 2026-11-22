@@ -15,37 +15,45 @@ try:
 except ImportError:
     sys.modules["bpy"] = types.ModuleType("bpy")
 
+# Nếu thiếu basicsr/realesrgan trên Python 3.13, tạo stub an toàn để không chặn import
+for _mod in ("basicsr", "basicsr.archs", "basicsr.archs.rrdbnet_arch", "realesrgan"):
+    if _mod not in sys.modules:
+        try:
+            __import__(_mod)
+        except ImportError:
+            m = types.ModuleType(_mod)
+            if _mod.endswith("rrdbnet_arch"):
+                m.RRDBNet = object
+            if _mod == "realesrgan":
+                m.RealESRGANer = object
+            sys.modules[_mod] = m
+
 import DifferentiableRenderer.mesh_utils as _mu
 if not hasattr(sys.modules.get("bpy"), "ops"):
     def _trimesh_obj_to_glb(obj_path, glb_path, **kwargs):
         trimesh.load(obj_path).export(glb_path)
     _mu.convert_obj_to_glb = _trimesh_obj_to_glb
 
-from hy3dshape.rembg import BackgroundRemover
-from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
-from hy3dshape.models.conditioners import SingleImageEncoder
-from textureGenPipeline import Hunyuan3DPaintPipeline, Hunyuan3DPaintConfig
-
-
-# Tự động ánh xạ key Dinov2Attention khi chạy trên transformers >= 4.50
-_orig_load_sd = SingleImageEncoder.load_state_dict
+# Tự động ánh xạ key Dinov2Attention trên mọi phiên bản transformers
+_orig_module_load_sd = torch.nn.Module.load_state_dict
 
 def _compat_load_sd(self, state_dict, strict=True, assign=False):
-    expected = set(self.state_dict().keys())
-    if any(".attention.q_proj." in k for k in expected) and any(".attention.attention.query." in k for k in state_dict):
-        remapped = {}
-        for k, v in state_dict.items():
-            nk = (
+    if self.__class__.__name__ == "SingleImageEncoder":
+        expected = set(self.state_dict().keys())
+        if any(".attention.q_proj." in k for k in expected) and any(".attention.attention.query." in k for k in state_dict):
+            state_dict = {
                 k.replace(".attention.attention.query.", ".attention.q_proj.")
                 .replace(".attention.attention.key.", ".attention.k_proj.")
                 .replace(".attention.attention.value.", ".attention.v_proj.")
-                .replace(".attention.output.dense.", ".attention.o_proj.")
-            )
-            remapped[nk] = v
-        state_dict = remapped
-    return _orig_load_sd(self, state_dict, strict=strict, assign=assign)
+                .replace(".attention.output.dense.", ".attention.o_proj."): v
+                for k, v in state_dict.items()
+            }
+    return _orig_module_load_sd(self, state_dict, strict=strict, assign=assign)
 
-SingleImageEncoder.load_state_dict = _compat_load_sd
+torch.nn.Module.load_state_dict = _compat_load_sd
+
+from hy3dshape.rembg import BackgroundRemover
+from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
 
 def main():
@@ -67,11 +75,16 @@ def main():
     torch.cuda.empty_cache()
 
     print("3/3 Đang tô màu PBR 3D (Hunyuan3D Paint)...", flush=True)
-    conf = Hunyuan3DPaintConfig(max_num_view=6, resolution=512)
-    paint_pipe = Hunyuan3DPaintPipeline(conf)
-    mesh = paint_pipe(mesh, image=img)
+    try:
+        from textureGenPipeline import Hunyuan3DPaintPipeline, Hunyuan3DPaintConfig
+        conf = Hunyuan3DPaintConfig(max_num_view=6, resolution=512)
+        paint_pipe = Hunyuan3DPaintPipeline(conf)
+        mesh = paint_pipe(mesh, image=img)
+        del paint_pipe
+    except Exception as exc:
+        print(f"⚠️ Paint PBR lỗi ({exc}), xuất mesh 3D gốc để Blender gắn xương...", flush=True)
+
     mesh.export(raw_glb)
-    del paint_pipe
     gc.collect()
     torch.cuda.empty_cache()
     print("Raw 3D GLB:", raw_glb, flush=True)
