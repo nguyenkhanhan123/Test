@@ -83,6 +83,7 @@ from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
 def main():
     raw_glb = "/content/Test/assets/models_3d/hoa_do_raw.glb"
+    shape_obj = "/content/Test/assets/models_3d/hoa_do_shape.obj"
     apose_png = "/content/Test/assets/apose_inputs/hoa_do_apose.png"
     os.makedirs("/content/Test/assets/models_3d", exist_ok=True)
     if os.path.exists(raw_glb) and os.path.getmtime(raw_glb) >= os.path.getmtime(apose_png):
@@ -92,25 +93,43 @@ def main():
     print("1/3 Đang tách nền ảnh A-Pose...", flush=True)
     img = Image.open(apose_png).convert("RGBA")
     img = BackgroundRemover()(img)
+    clean_png = "/content/Test/assets/models_3d/hoa_do_clean.png"
+    img.save(clean_png)
 
-    print("2/3 Đang tạo hình khối 3D (Hunyuan3D Shape)...", flush=True)
-    shape_pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1")
-    mesh = shape_pipe(image=img)[0]
-    del shape_pipe
-    gc.collect()
-    torch.cuda.empty_cache()
+    if not (os.path.exists(shape_obj) and os.path.getmtime(shape_obj) >= os.path.getmtime(apose_png)):
+        print("2/3 Đang tạo hình khối 3D (Hunyuan3D Shape)...", flush=True)
+        shape_pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1")
+        mesh = shape_pipe(image=img)[0]
+        mesh.export(shape_obj)
+        del shape_pipe
+        gc.collect()
+        torch.cuda.empty_cache()
+    else:
+        print("2/3 Dùng lại shape 3D đã tạo:", shape_obj, flush=True)
+        mesh = trimesh.load(shape_obj)
 
     print("3/3 Đang tô màu PBR 3D (Hunyuan3D Paint)...", flush=True)
     try:
+        import inspect
         from textureGenPipeline import Hunyuan3DPaintPipeline, Hunyuan3DPaintConfig
         conf = Hunyuan3DPaintConfig(max_num_view=6, resolution=512)
         paint_pipe = Hunyuan3DPaintPipeline(conf)
-        mesh = paint_pipe(mesh, image=img)
+        sig = inspect.signature(paint_pipe.__call__).parameters
+        painted_obj = "/content/Test/assets/models_3d/hoa_do_painted.obj"
+        if "mesh_path" in sig:
+            out_res = paint_pipe(mesh_path=shape_obj, image_path=clean_png, output_mesh_path=painted_obj)
+        else:
+            out_res = paint_pipe(shape_obj, clean_png)
+        out_path = out_res if isinstance(out_res, str) and os.path.exists(out_res) else painted_obj
+        if os.path.exists(out_path):
+            trimesh.load(out_path).export(raw_glb)
+        else:
+            mesh.export(raw_glb)
         del paint_pipe
     except Exception as exc:
         print(f"⚠️ Paint PBR lỗi ({exc}), xuất mesh 3D gốc để Blender gắn xương...", flush=True)
+        mesh.export(raw_glb)
 
-    mesh.export(raw_glb)
     gc.collect()
     torch.cuda.empty_cache()
     print("Raw 3D GLB:", raw_glb, flush=True)
