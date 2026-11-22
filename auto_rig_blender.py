@@ -151,9 +151,21 @@ if out_mp4:
         arm_obj.rotation_euler = (0, 0, math.radians(ang))
         arm_obj.keyframe_insert(data_path="rotation_euler", frame=f)
 
-    scene.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["render_engine"].enum_items] else "BLENDER_EEVEE"
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 540
+    scene.render.engine = "CYCLES"
+    scene.cycles.samples = 16
+    scene.cycles.use_denoising = True
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        prefs.compute_device_type = "CUDA"
+        prefs.get_devices()
+        for dev in prefs.devices:
+            dev.use = True
+        scene.cycles.device = "GPU"
+    except Exception:
+        scene.cycles.device = "CPU"
+
+    scene.render.resolution_x = 800
+    scene.render.resolution_y = 450
     scene.render.image_settings.file_format = "FFMPEG"
     scene.render.ffmpeg.format = "MPEG4"
     scene.render.ffmpeg.codec = "H264"
