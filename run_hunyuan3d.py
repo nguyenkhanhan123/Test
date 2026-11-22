@@ -60,6 +60,17 @@ def _compat_load_sd(self, state_dict, strict=True, assign=False):
 
 torch.nn.Module.load_state_dict = _compat_load_sd
 
+# Tự động bật trust_remote_code=True cho custom pipeline hunyuanpaintpbr trên diffusers >= 0.35
+import diffusers
+_orig_dp_from_pretrained = diffusers.DiffusionPipeline.from_pretrained.__func__
+
+@classmethod
+def _compat_dp_from_pretrained(cls, *args, **kwargs):
+    kwargs.setdefault("trust_remote_code", True)
+    return _orig_dp_from_pretrained(cls, *args, **kwargs)
+
+diffusers.DiffusionPipeline.from_pretrained = _compat_dp_from_pretrained
+
 from hy3dshape.rembg import BackgroundRemover
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
