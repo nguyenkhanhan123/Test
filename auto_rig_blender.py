@@ -66,7 +66,7 @@ bpy.ops.object.armature_add(enter_editmode=True, location=(0, 0, 0))
 arm_obj = bpy.context.active_object
 arm_obj.name = "HeroRig"
 arm = arm_obj.data
-arm.bones.remove(arm.edit_bones[0])
+arm.edit_bones.remove(arm.edit_bones[0])
 
 def add_bone(name, head, tail, parent=None):
     b = arm.edit_bones.new(name)
