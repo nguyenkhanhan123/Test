@@ -58,13 +58,14 @@ from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
 def main():
     raw_glb = "/content/Test/assets/models_3d/hoa_do_raw.glb"
+    apose_png = "/content/Test/assets/apose_inputs/hoa_do_apose.png"
     os.makedirs("/content/Test/assets/models_3d", exist_ok=True)
-    if os.path.exists(raw_glb):
+    if os.path.exists(raw_glb) and os.path.getmtime(raw_glb) >= os.path.getmtime(apose_png):
         print("Skip (đã có):", raw_glb, flush=True)
         return
 
     print("1/3 Đang tách nền ảnh A-Pose...", flush=True)
-    img = Image.open("/content/Test/assets/apose_inputs/hoa_do_apose.png").convert("RGBA")
+    img = Image.open(apose_png).convert("RGBA")
     img = BackgroundRemover()(img)
 
     print("2/3 Đang tạo hình khối 3D (Hunyuan3D Shape)...", flush=True)

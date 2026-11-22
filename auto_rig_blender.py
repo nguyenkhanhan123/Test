@@ -142,9 +142,16 @@ if out_mp4:
     bpy.ops.object.light_add(type="AREA", location=(-3, -2, 3))
     bpy.context.active_object.data.energy = 120.0
 
-    bpy.ops.object.camera_add(location=(0, -3.4, 1.15), rotation=(math.radians(82), 0, 0))
+    bpy.ops.object.camera_add(location=(0, -4.0, 0.92), rotation=(math.radians(88), 0, 0))
     cam = bpy.context.active_object
     scene.camera = cam
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("World")
+    scene.world.use_nodes = True
+    bg = scene.world.node_tree.nodes.get("Background")
+    if bg:
+        bg.inputs[0].default_value = (0.12, 0.14, 0.18, 1.0)
+        bg.inputs[1].default_value = 1.2
 
     # Rotate hero slowly for 360-ish preview while punching
     for f, ang in [(1, -20), (48, 25), (96, 360)]:
