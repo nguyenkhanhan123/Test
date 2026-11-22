@@ -13,6 +13,15 @@ for _pkg in ("pytorch_lightning", "fast_simplification"):
     except ImportError:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", _pkg], check=True)
 
+import fast_simplification as _fs
+_orig_simplify = _fs.simplify
+def _safe_simplify(points, triangles, target_reduction=0.5, *args, **kwargs):
+    if target_reduction <= 0:
+        return points, triangles
+    target_reduction = min(0.95, float(target_reduction))
+    return _orig_simplify(points, triangles, target_reduction, *args, **kwargs)
+_fs.simplify = _safe_simplify
+
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dshape")
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dpaint")
 os.chdir("/content/Hunyuan3D-2.1")
