@@ -7,10 +7,11 @@ import torch
 import trimesh
 from PIL import Image
 
-try:
-    import pytorch_lightning  # noqa: F401
-except ImportError:
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pytorch_lightning"], check=True)
+for _pkg in ("pytorch_lightning", "fast_simplification"):
+    try:
+        __import__(_pkg)
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", _pkg], check=True)
 
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dshape")
 sys.path.insert(0, "/content/Hunyuan3D-2.1/hy3dpaint")
@@ -96,7 +97,7 @@ def main():
     clean_png = "/content/Test/assets/models_3d/hoa_do_clean.png"
     img.save(clean_png)
 
-    if not (os.path.exists(shape_obj) and os.path.getmtime(shape_obj) >= os.path.getmtime(apose_png)):
+    if not os.path.exists(shape_obj):
         print("2/3 Đang tạo hình khối 3D (Hunyuan3D Shape)...", flush=True)
         shape_pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1")
         mesh = shape_pipe(image=img)[0]
