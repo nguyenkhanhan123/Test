@@ -59,8 +59,14 @@ cy = 0.5 * (min(v.y for v in bbox) + max(v.y for v in bbox))
 char_obj.location = (-cx, -cy, -min_z)
 bpy.ops.object.transform_apply(location=True)
 
-# Chỉ gộp đỉnh trùng khi mesh KHÔNG có UV (tránh làm lệch đường cắt UV gây lem màu PBR)
+# Bật Shade Smooth để bề mặt mượt, không bị đa giác gãy khúc như kim cương
 bpy.context.view_layer.objects.active = char_obj
+bpy.ops.object.select_all(action="DESELECT")
+char_obj.select_set(True)
+bpy.ops.object.shade_smooth()
+print(f"Mesh loaded: {len(char_obj.data.vertices)} verts, {len(char_obj.data.polygons)} faces, UV={len(char_obj.data.uv_layers)}")
+
+# Chỉ gộp đỉnh trùng khi mesh KHÔNG có UV (tránh làm lệch đường cắt UV gây lem màu PBR)
 has_uv = len(char_obj.data.uv_layers) > 0
 if not has_uv:
     bpy.ops.object.mode_set(mode="EDIT")
@@ -77,14 +83,20 @@ if len(char_obj.data.polygons) > 60000:
     bpy.context.view_layer.objects.active = char_obj
     bpy.ops.object.modifier_apply(modifier=dec.name)
 
-# Fix PBR plastic shine
+# Tắt map Metallic/Roughness nhiễu gây lóa trắng như kim cương, chỉ giữ Base Color sắc nét
 for mat in bpy.data.materials:
-    if mat.use_nodes:
-        for node in mat.node_tree.nodes:
+    if mat.use_nodes and mat.node_tree:
+        nt = mat.node_tree
+        for node in nt.nodes:
             if node.type == "BSDF_PRINCIPLED":
-                node.inputs["Metallic"].default_value = 0.0
-                if node.inputs["Roughness"].default_value < 0.5:
-                    node.inputs["Roughness"].default_value = 0.65
+                for sock_name in ("Metallic", "Roughness", "Specular IOR Level", "Coat Weight"):
+                    if sock_name in node.inputs:
+                        for link in list(node.inputs[sock_name].links):
+                            nt.links.remove(link)
+                node.inputs["Metallic"].default_value = 0.05
+                node.inputs["Roughness"].default_value = 0.65
+                if "Specular IOR Level" in node.inputs:
+                    node.inputs["Specular IOR Level"].default_value = 0.25
 
 # Build Humanoid Armature scaled to 1.75m A-Pose
 bpy.ops.object.armature_add(enter_editmode=True, location=(0, 0, 0))
@@ -127,17 +139,7 @@ bpy.context.view_layer.objects.active = arm_obj
 bpy.ops.object.parent_set(type="ARMATURE_AUTO")
 
 # Kiểm tra xem ARMATURE_AUTO có gán được trọng số không; nếu rỗng thì gán theo xương gần nhất
-has_weights = False
-for vg in char_obj.vertex_groups:
-    for v in char_obj.data.vertices[:min(200, len(char_obj.data.vertices))]:
-        try:
-            if vg.weight(v.index) > 0.01:
-                has_weights = True
-                break
-        except RuntimeError:
-            pass
-    if has_weights:
-        break
+has_weights = any(len(v.groups) > 0 for v in char_obj.data.vertices[:min(500, len(char_obj.data.vertices))])
 
 if not has_weights:
     print("⚠️ ARMATURE_AUTO không bám được weight, chuyển sang gán weight theo xương gần nhất...")
@@ -236,7 +238,7 @@ if out_mp4:
     bpy.ops.object.light_add(type="AREA", location=(-3, -2, 3))
     bpy.context.active_object.data.energy = 120.0
 
-    bpy.ops.object.camera_add(location=(0, -4.0, 0.92), rotation=(math.radians(88), 0, 0))
+    bpy.ops.object.camera_add(location=(0, -4.5, 0.95), rotation=(math.radians(88), 0, 0))
     cam = bpy.context.active_object
     scene.camera = cam
     if scene.world is None:

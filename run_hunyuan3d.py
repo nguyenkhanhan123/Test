@@ -21,11 +21,28 @@ for _pkg in ("pytorch_lightning", "fast_simplification", "pybind11"):
 
 import fast_simplification as _fs
 _orig_simplify = _fs.simplify
-def _safe_simplify(points, triangles, target_reduction=0.5, *args, **kwargs):
-    if target_reduction <= 0:
+def _safe_simplify(points, triangles, target_reduction=None, *args, **kwargs):
+    n_faces = len(triangles)
+    min_faces = 40000
+    if n_faces <= min_faces:
         return points, triangles
-    target_reduction = min(0.95, float(target_reduction))
-    return _orig_simplify(points, triangles, target_reduction, *args, **kwargs)
+    if target_reduction is not None:
+        val = float(target_reduction)
+        if val >= 1.0:
+            # Caller passed target_count into target_reduction position
+            target_count = max(min_faces, int(val))
+            if n_faces <= target_count:
+                return points, triangles
+            val = 1.0 - (target_count / n_faces)
+        elif val <= 0.0:
+            return points, triangles
+        else:
+            max_red = max(0.0, 1.0 - (min_faces / n_faces))
+            val = min(val, max_red)
+            if val <= 0.01:
+                return points, triangles
+        return _orig_simplify(points, triangles, val, *args, **kwargs)
+    return _orig_simplify(points, triangles, *args, **kwargs)
 _fs.simplify = _safe_simplify
 
 
