@@ -74,8 +74,21 @@ except ImportError:
 class _DummyModel:
     def __init__(self, *args, **kwargs):
         pass
+
     def enhance(self, img, outscale=4, **kwargs):
+        scale = float(outscale) if outscale else 1.0
+        if scale <= 1.0:
+            return img, None
+        if isinstance(img, np.ndarray):
+            import cv2
+            h, w = img.shape[:2]
+            up = cv2.resize(img, (int(round(w * scale)), int(round(h * scale))), interpolation=cv2.INTER_LANCZOS4)
+            return up, None
+        if isinstance(img, Image.Image):
+            w, h = img.size
+            return img.resize((int(round(w * scale)), int(round(h * scale))), Image.Resampling.LANCZOS), None
         return img, None
+
     def to(self, *args, **kwargs):
         return self
 
@@ -120,7 +133,7 @@ try:
     import DifferentiableRenderer.mesh_utils as _mu
     if not hasattr(sys.modules.get("bpy"), "ops"):
         def _trimesh_obj_to_glb(obj_path, glb_path, **kwargs):
-            trimesh.load(obj_path).export(glb_path)
+            trimesh.load(obj_path, process=False).export(glb_path)
         _mu.convert_obj_to_glb = _trimesh_obj_to_glb
 except Exception:
     pass
@@ -205,8 +218,8 @@ def main():
             shutil.copy2(painted_glb, raw_glb)
             print("-> Đã sao chép GLB có màu PBR:", raw_glb, flush=True)
         elif os.path.exists(out_path):
-            trimesh.load(out_path).export(raw_glb)
-            print("-> Đã xuất GLB từ OBJ có màu PBR:", raw_glb, flush=True)
+            trimesh.load(out_path, process=False).export(raw_glb)
+            print("-> Đã xuất GLB từ OBJ có màu PBR (giữ nguyên UV):", raw_glb, flush=True)
         else:
             mesh.export(raw_glb)
         del paint_pipe

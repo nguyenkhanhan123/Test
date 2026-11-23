@@ -19,7 +19,14 @@ out_glb = os.path.abspath(argv[1])
 out_mp4 = os.path.abspath(argv[2]) if len(argv) > 2 else None
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=input_glb)
+painted_obj = os.path.join(os.path.dirname(input_glb), "hoa_do_painted.obj")
+if os.path.exists(painted_obj) and os.path.exists(os.path.splitext(painted_obj)[0] + ".mtl"):
+    print("Nạp trực tiếp OBJ+MTL gốc từ Hunyuan3D (giữ nguyên 100% UV & texture PBR):", painted_obj)
+    bpy.ops.wm.obj_import(filepath=painted_obj)
+elif input_glb.lower().endswith(".obj"):
+    bpy.ops.wm.obj_import(filepath=input_glb)
+else:
+    bpy.ops.import_scene.gltf(filepath=input_glb)
 
 meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 if not meshes:
@@ -52,17 +59,21 @@ cy = 0.5 * (min(v.y for v in bbox) + max(v.y for v in bbox))
 char_obj.location = (-cx, -cy, -min_z)
 bpy.ops.object.transform_apply(location=True)
 
-# Làm sạch đỉnh trùng & pháp tuyến + giảm lưới (<45k mặt) để ARMATURE_AUTO bám xương chính xác
+# Chỉ gộp đỉnh trùng khi mesh KHÔNG có UV (tránh làm lệch đường cắt UV gây lem màu PBR)
 bpy.context.view_layer.objects.active = char_obj
-bpy.ops.object.mode_set(mode="EDIT")
-bpy.ops.mesh.select_all(action="SELECT")
-bpy.ops.mesh.remove_doubles(threshold=0.002)
-bpy.ops.mesh.normals_make_consistent(inside=False)
-bpy.ops.object.mode_set(mode="OBJECT")
+has_uv = len(char_obj.data.uv_layers) > 0
+if not has_uv:
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=0.002)
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
 
-if len(char_obj.data.polygons) > 45000:
+if len(char_obj.data.polygons) > 60000:
     dec = char_obj.modifiers.new(name="Decimate", type="DECIMATE")
-    dec.ratio = 45000.0 / len(char_obj.data.polygons)
+    dec.ratio = 60000.0 / len(char_obj.data.polygons)
+    if has_uv:
+        dec.delimit = {"UV"}
     bpy.context.view_layer.objects.active = char_obj
     bpy.ops.object.modifier_apply(modifier=dec.name)
 
@@ -204,11 +215,17 @@ key_pose(96, {
 
 bpy.ops.object.mode_set(mode="OBJECT")
 
+try:
+    bpy.ops.file.pack_all()
+except Exception:
+    pass
+
 os.makedirs(os.path.dirname(out_glb), exist_ok=True)
 bpy.ops.export_scene.gltf(
     filepath=out_glb,
     export_format="GLB",
     export_animations=True,
+    export_image_format="AUTO",
 )
 print("Exported rigged GLB:", out_glb)
 
@@ -236,7 +253,7 @@ if out_mp4:
         arm_obj.keyframe_insert(data_path="rotation_euler", frame=f)
 
     scene.render.engine = "CYCLES"
-    scene.cycles.samples = 16
+    scene.cycles.samples = 32
     scene.cycles.use_denoising = True
     try:
         prefs = bpy.context.preferences.addons["cycles"].preferences
@@ -248,8 +265,8 @@ if out_mp4:
     except Exception:
         scene.cycles.device = "CPU"
 
-    scene.render.resolution_x = 800
-    scene.render.resolution_y = 450
+    scene.render.resolution_x = 1280
+    scene.render.resolution_y = 720
     scene.render.image_settings.file_format = "FFMPEG"
     scene.render.ffmpeg.format = "MPEG4"
     scene.render.ffmpeg.codec = "H264"
