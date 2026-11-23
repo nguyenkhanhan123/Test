@@ -92,9 +92,11 @@ for _mod in ("basicsr", "basicsr.archs", "basicsr.archs.rrdbnet_arch", "realesrg
                 m.RealESRGANer = _DummyModel
             sys.modules[_mod] = m
 
-# Fallback pure-SciPy cho meshVerticeInpaint nếu bản C++ .so không import được
-import DifferentiableRenderer.mesh_render as _mr
-if not hasattr(_mr, "meshVerticeInpaint"):
+# Nạp C++ mesh_inpaint_processor; nếu lỗi mới chèn fallback pure-SciPy vào sys.modules
+try:
+    import DifferentiableRenderer.mesh_inpaint_processor as _mip  # type: ignore
+    print("-> Đã nạp C++ mesh_inpaint_processor thành công!", flush=True)
+except Exception:
     from scipy.ndimage import distance_transform_edt
 
     def _scipy_mesh_vertice_inpaint(texture, mask, *args, **kwargs):
@@ -108,14 +110,20 @@ if not hasattr(_mr, "meshVerticeInpaint"):
             tex[invalid] = tex[tuple(indices[:, invalid])]
         return tex
 
-    _mr.meshVerticeInpaint = _scipy_mesh_vertice_inpaint
-    print("-> Đã kích hoạt SciPy fallback cho meshVerticeInpaint", flush=True)
+    _fake_mip = types.ModuleType("DifferentiableRenderer.mesh_inpaint_processor")
+    _fake_mip.meshVerticeInpaint = _scipy_mesh_vertice_inpaint
+    sys.modules["DifferentiableRenderer.mesh_inpaint_processor"] = _fake_mip
+    sys.modules["mesh_inpaint_processor"] = _fake_mip
+    print("-> Đã kích hoạt SciPy fallback cho mesh_inpaint_processor", flush=True)
 
-import DifferentiableRenderer.mesh_utils as _mu
-if not hasattr(sys.modules.get("bpy"), "ops"):
-    def _trimesh_obj_to_glb(obj_path, glb_path, **kwargs):
-        trimesh.load(obj_path).export(glb_path)
-    _mu.convert_obj_to_glb = _trimesh_obj_to_glb
+try:
+    import DifferentiableRenderer.mesh_utils as _mu
+    if not hasattr(sys.modules.get("bpy"), "ops"):
+        def _trimesh_obj_to_glb(obj_path, glb_path, **kwargs):
+            trimesh.load(obj_path).export(glb_path)
+        _mu.convert_obj_to_glb = _trimesh_obj_to_glb
+except Exception:
+    pass
 
 _orig_module_load_sd = torch.nn.Module.load_state_dict
 
