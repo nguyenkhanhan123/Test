@@ -1,24 +1,148 @@
 """
-Sentai 3D Director — Cảnh Võ Thuật 1 Phút (60 giây, 720p 24fps, Người thật chưa biến thân)
-- 2 nhân vật NGƯỜI THẬT 3D chuẩn Rig (có khuôn mặt, tóc, trang phục thật — Ready Player Me Male + Soldier)
-- 60 giây biên đạo võ thuật 6 hồi: Đối đầu -> Đấm Jab/Cross -> Đá tống & Đá xoay -> Phản công -> Liên hoàn Hỏa Quyền -> Kết thúc
-- 8 góc máy hành động điện ảnh tự động cắt cảnh + hiệu ứng tia lửa va chạm (Impact Flash/Ring)
-- Ghép thoại tiếng Việt 2 nhân vật (edge-tts) + tiếng đấm/đá (SFX) đồng bộ đúng khung hình + nhạc nền chiến đấu
+Sentai 3D Director — Cảnh Võ Thuật NGƯỜI THẬT 1 Phút (60 giây, 720p 24fps)
+Dùng 100% NHÂN VẬT NGƯỜI THẬT + MOTION CAPTURE VÕ THUẬT THẬT TỪ MIXAMO (tự tải từ Hugging Face):
+- Dataset: Linzhan/Mixamo-Animations-Characters (114 nhân vật chuẩn Rig + 2.317 file Motion Capture .fbx thật!)
+- Không tự viết tay góc xoay xương -> chân bám chặt mặt đất, đấm/đá xoay/né đòn/trúng đòn thật 100% như diễn viên đóng thế!
+- Tự động nối mượt các clip .fbx bằng Blender NLA (blend_in=6 frame) suốt 60 giây + 8 góc máy hành động + SFX & thoại tiếng Việt!
 """
 import asyncio
+import json
 import math
 import os
+import random
 import shutil
+import struct
 import subprocess
 import sys
-import urllib.request
 import wave
-import struct
 
 
-def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
+def download_mixamo_assets(work_dir):
+    """Tự động tải 2 nhân vật người thật + bộ Motion Capture võ thuật thật (.fbx) từ Hugging Face Mixamo dataset."""
+    from huggingface_hub import HfApi, hf_hub_download
+
+    manifest_path = os.path.join(work_dir, "mixamo_manifest.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if os.path.exists(data.get("hero_fbx", "")) and os.path.exists(data.get("enemy_fbx", "")) and len(data.get("anims", {})) >= 5:
+            print("Dùng lại bộ nhân vật & Motion Capture Mixamo đã tải sẵn!", flush=True)
+            return data
+
+    api = HfApi()
+    repo_id = None
+    files = []
+    for cand in ("Linzhan/Mixamo-Animations-Characters", "tanish434/Mixamo-Animations-Characters"):
+        try:
+            print(f"Đang quét kho Mixamo Motion Capture trên Hugging Face ({cand})...", flush=True)
+            files = api.list_repo_files(repo_id=cand, repo_type="dataset")
+            if files:
+                repo_id = cand
+                break
+        except Exception as e:
+            print(f"  Bỏ qua {cand}: {e}", flush=True)
+
+    if not repo_id or not files:
+        raise RuntimeError("Không truy cập được kho Mixamo trên Hugging Face.")
+
+    # 1. Chọn 2 nhân vật NGƯỜI THẬT NAM từ character_refined/ (hoặc character/)
+    char_fbxs = [f for f in files if f.lower().endswith(".fbx") and ("character_refined/" in f.lower() or f.lower().startswith("character/"))]
+    if not char_fbxs:
+        char_fbxs = [f for f in files if f.lower().endswith(".fbx") and "character" in f.lower()]
+
+    def pick_char(preferred_names, exclude=None):
+        for name in preferred_names:
+            for f in char_fbxs:
+                if f == exclude:
+                    continue
+                base = os.path.basename(f).lower()
+                if name.lower() in base:
+                    return f
+        # Fallback: lấy file fbx đầu tiên khác exclude
+        for f in char_fbxs:
+            if f != exclude:
+                return f
+        return None
+
+    hero_remote = pick_char(["remy", "david", "douglas", "leonard", "adam", "brian", "liam", "malcolm", "james", "bryce", "ch31", "ch17", "ch14"])
+    enemy_remote = pick_char(["swat", "soldier", "malcolm", "douglas", "leonard", "brian", "david", "josh", "pete", "ch15", "ch33", "vanguard"], exclude=hero_remote)
+    if not hero_remote or not enemy_remote:
+        raise RuntimeError(f"Không tìm thấy đủ 2 file nhân vật FBX trong {repo_id}.")
+
+    # 2. Chọn bộ file MOTION CAPTURE VÕ THUẬT THẬT (.fbx)
+    anim_fbxs = [f for f in files if f.lower().endswith(".fbx") and "animation" in f.lower()]
+    # Ưu tiên thư mục animation_motion_ybot hoặc animation/ chuẩn nhất
+    ybot_anims = [f for f in anim_fbxs if "ybot" in f.lower()]
+    if len(ybot_anims) > 100:
+        anim_fbxs = ybot_anims
+
+    def pick_anim(keywords, used_set):
+        for kw in keywords:
+            k = kw.lower()
+            for f in anim_fbxs:
+                if f in used_set:
+                    continue
+                base = os.path.basename(f).lower().replace("_", " ").replace("-", " ")
+                if k in base:
+                    used_set.add(f)
+                    return f
+        # Nếu trùng used_set thì cho phép dùng lại
+        for kw in keywords:
+            k = kw.lower()
+            for f in anim_fbxs:
+                base = os.path.basename(f).lower().replace("_", " ").replace("-", " ")
+                if k in base:
+                    return f
+        return None
+
+    used = set()
+    anim_queries = {
+        "idle": ["fight idle", "fighting idle", "bouncing fight", "boxing idle", "combat idle", "idle"],
+        "jab": ["lead jab", "jab", "punching", "boxing", "punch"],
+        "cross": ["cross punch", "hook punch", "right hook", "punch combo", "hook", "punch"],
+        "uppercut": ["uppercut", "elbow punch", "punch to elbow", "quad punch", "boxing"],
+        "kick_front": ["mma kick", "front kick", "push kick", "kicking", "kick"],
+        "kick_spin": ["roundhouse kick", "hurricane kick", "flying kick", "spinning", "martelo", "kick"],
+        "block": ["center block", "body block", "block", "dodging", "dodge"],
+        "hit": ["hit to body", "head hit", "stomach hit", "kidney hit", "reaction", "hit"],
+        "knockdown": ["knocked down", "falling back", "fall flat", "dying", "defeat", "hit"],
+    }
+
+    selected_anims_remote = {}
+    for slot, kws in anim_queries.items():
+        found = pick_anim(kws, used)
+        if found:
+            selected_anims_remote[slot] = found
+
+    print(f"Nhân vật Hero:  {hero_remote}", flush=True)
+    print(f"Nhân vật Enemy: {enemy_remote}", flush=True)
+    print(f"Đã chọn {len(selected_anims_remote)} động tác Motion Capture võ thuật thật:", flush=True)
+    for k, v in selected_anims_remote.items():
+        print(f"  - {k:10s}: {os.path.basename(v)}", flush=True)
+
+    # Tải các file đã chọn về ổ đĩa Colab
+    local_dir = os.path.join(work_dir, "mixamo_cache")
+    os.makedirs(local_dir, exist_ok=True)
+
+    def fetch(remote_path):
+        return hf_hub_download(repo_id=repo_id, filename=remote_path, repo_type="dataset", local_dir=local_dir)
+
+    hero_fbx = fetch(hero_remote)
+    enemy_fbx = fetch(enemy_remote)
+    anims_local = {k: fetch(v) for k, v in selected_anims_remote.items()}
+
+    manifest = {"hero_fbx": hero_fbx, "enemy_fbx": enemy_fbx, "anims": anims_local}
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    return manifest
+
+
+def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     import bpy
-    from mathutils import Euler, Vector
+    from mathutils import Vector
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
@@ -41,42 +165,16 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
                 bsdf.inputs["Emission Strength"].default_value = em_strength
         return mat
 
-    def tint_material(mat, rgba, factor=0.78):
-        if not mat or not mat.use_nodes or not mat.node_tree:
-            return
-        nt = mat.node_tree
-        bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
-        if not bsdf:
-            return
-        base_sock = bsdf.inputs.get("Base Color")
-        if base_sock is None:
-            return
-        if base_sock.is_linked:
-            orig_link = base_sock.links[0]
-            from_sock = orig_link.from_socket
-            nt.links.remove(orig_link)
-            mix = nt.nodes.new("ShaderNodeMix")
-            mix.data_type = "RGBA"
-            mix.blend_type = "MULTIPLY"
-            mix.inputs["Factor"].default_value = factor
-            mix.inputs["B"].default_value = rgba
-            nt.links.new(from_sock, mix.inputs["A"])
-            nt.links.new(mix.outputs["Result"], base_sock)
-        else:
-            base_sock.default_value = rgba
-
-    # --- 1. BỐI CẢNH SÂN THƯỢNG / ĐẤU TRƯỜNG ĐÊM 3D THẬT ---
-    mat_floor = make_pbr_mat("Rooftop_Floor", (0.03, 0.035, 0.045, 1.0), metallic=0.18, roughness=0.28)
-    mat_concrete = make_pbr_mat("Concrete_Wall", (0.07, 0.075, 0.09, 1.0), metallic=0.15, roughness=0.65)
+    # --- 1. BỐI CẢNH ĐẤU TRƯỜNG SÂN THƯỢNG ĐÊM 3D ---
+    mat_floor = make_pbr_mat("Rooftop_Floor", (0.03, 0.035, 0.045, 1.0), metallic=0.18, roughness=0.26)
+    mat_concrete = make_pbr_mat("Concrete_Wall", (0.07, 0.075, 0.09, 1.0), metallic=0.12, roughness=0.65)
     mat_neon_red = make_pbr_mat("Neon_Red", (1.0, 0.10, 0.05, 1.0), metallic=0.1, roughness=0.2, emission=(1.0, 0.14, 0.05, 1.0), em_strength=10.0)
     mat_neon_blue = make_pbr_mat("Neon_Blue", (0.08, 0.65, 1.0, 1.0), metallic=0.1, roughness=0.2, emission=(0.08, 0.68, 1.0, 1.0), em_strength=9.0)
     mat_spark = make_pbr_mat("Impact_Spark", (1.0, 0.45, 0.08, 1.0), metallic=0.0, roughness=0.1, emission=(1.0, 0.35, 0.05, 1.0), em_strength=28.0)
 
     bpy.ops.mesh.primitive_plane_add(size=40.0, location=(0, 0, 0))
-    floor = bpy.context.active_object
-    floor.data.materials.append(mat_floor)
+    bpy.context.active_object.data.materials.append(mat_floor)
 
-    # Vạch sân đấu & hàng trụ đèn sân thượng thành phố về đêm
     for sx in (-3.6, 3.6):
         bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx, 0, 0.02))
         st = bpy.context.active_object
@@ -98,7 +196,6 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
             bpy.ops.object.transform_apply(scale=True)
             gb.data.materials.append(mat_neon_red if idx % 2 == 0 else mat_neon_blue)
 
-    # Đường chân trời tòa nhà phía sau tạo chiều sâu thành phố
     for bx, by, bh in [(-7, 10, 8), (-3, 12, 11), (2, 11, 9), (6.5, 10, 12)]:
         bpy.ops.mesh.primitive_cube_add(size=1.0, location=(bx, by, bh / 2.0))
         b = bpy.context.active_object
@@ -106,32 +203,71 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
         bpy.ops.object.transform_apply(scale=True)
         b.data.materials.append(mat_concrete)
 
-    # --- 2. NẠP 2 NHÂN VẬT NGƯỜI THẬT 3D (CÓ MẶT, TÓC, QUẦN ÁO THẬT) ---
-    def load_human_fighter(name, glb_path, top_tint=None, bottom_tint=None):
-        before = set(bpy.context.scene.objects)
-        bpy.ops.import_scene.gltf(filepath=glb_path)
-        new_objs = [o for o in bpy.context.scene.objects if o not in before]
+    # --- 2. NẠP BỘ MOTION CAPTURE ACTIONS (.FBX) & CHUẨN HÓA ĐỂ KHÔNG TRÔI VỊ TRÍ X/Y ---
+    mocap_actions = {}
+    for clip_key, fbx_path in manifest["anims"].items():
+        before_objs = set(bpy.context.scene.objects)
+        before_acts = set(bpy.data.actions)
+        try:
+            bpy.ops.import_scene.fbx(filepath=fbx_path, ignore_leaf_bones=True)
+        except Exception as e:
+            print(f"⚠️ Không nạp được anim {clip_key}: {e}", flush=True)
+            continue
+        new_objs = [o for o in bpy.context.scene.objects if o not in before_objs]
+        new_acts = [a for a in bpy.data.actions if a not in before_acts]
+
+        # Xóa bộ xương tạm của file anim, chỉ giữ lại Action Motion Capture!
+        for o in new_objs:
+            bpy.data.objects.remove(o, do_unlink=True)
+
+        if not new_acts:
+            continue
+        act = new_acts[0]
+        act.name = f"Mocap_{clip_key}"
+        act.use_fake_user = True
+
+        # Khóa trượt ngang (X, Y) của xương Hips tại frame đầu để nhân vật KHÔNG trôi ra khỏi sân đấu,
+        # nhưng GIỮ NGUYÊN 100% độ cao Z & mọi chuyển động chân/eo/tay/đầu để chân bám chặt mặt đất!
+        for fc in act.fcurves:
+            if "hips" in fc.data_path.lower() and fc.data_path.endswith("location") and fc.array_index in (0, 2):
+                # Trong Mixamo FBX, index 0 = X ngang, index 2 = Z tiến/lùi (index 1 = Y độ cao thẳng đứng!)
+                if fc.keyframe_points:
+                    base_v = fc.keyframe_points[0].co.y
+                    for kp in fc.keyframe_points:
+                        # Giữ lại 25% nhịp bước tự nhiên để đòn đánh có lực nhưng không trôi mất
+                        kp.co.y = base_v + (kp.co.y - base_v) * 0.25
+                        kp.handle_left.y = base_v + (kp.handle_left.y - base_v) * 0.25
+                        kp.handle_right.y = base_v + (kp.handle_right.y - base_v) * 0.25
+
+        f_len = max(12, int(round(act.frame_range[1] - act.frame_range[0])))
+        mocap_actions[clip_key] = (act, f_len)
+        print(f"Loaded REAL Mocap Action: {act.name} ({f_len} frames)", flush=True)
+
+    if not mocap_actions:
+        raise RuntimeError("Không nạp được Action Motion Capture nào từ Mixamo FBX!")
+
+    # --- 3. NẠP 2 NHÂN VẬT NGƯỜI THẬT MIXAMO (.FBX) ---
+    def load_mixamo_character(name, fbx_path):
+        before_objs = set(bpy.context.scene.objects)
+        bpy.ops.import_scene.fbx(filepath=fbx_path, ignore_leaf_bones=True)
+        new_objs = [o for o in bpy.context.scene.objects if o not in before_objs]
         arm = next((o for o in new_objs if o.type == "ARMATURE"), None)
         meshes = [o for o in new_objs if o.type == "MESH"]
         roots = [o for o in new_objs if o.parent is None]
         if arm is None:
-            raise RuntimeError(f"No armature in {glb_path}")
+            raise RuntimeError(f"No armature in {fbx_path}")
 
-        # Xóa animation mặc định (nếu có) để biên đạo võ thuật trực tiếp sạch 100%
         if arm.animation_data:
             arm.animation_data.action = None
-            for tr in list(arm.animation_data.nla_tracks):
-                arm.animation_data.nla_tracks.remove(tr)
 
-        # Chuẩn hóa chiều cao đúng 1.78m đứng trên Z=0
+        # Chuẩn hóa chiều cao đúng 1.78m đứng chạm sàn Z=0
         bpy.context.view_layer.update()
         pts = []
         for m in meshes:
             pts.extend(m.matrix_world @ Vector(c) for c in m.bound_box)
         min_z = min(v.z for v in pts)
         max_z = max(v.z for v in pts)
-        h = max(0.2, max_z - min_z)
-        sc = 1.78 / h
+        sc = 1.78 / max(0.2, max_z - min_z)
 
         root_empty = bpy.data.objects.new(f"{name}_Root", None)
         scene.collection.objects.link(root_empty)
@@ -140,307 +276,117 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
             r.location.z -= min_z * sc
             r.parent = root_empty
 
-        # Làm mịn lưới & nhuộm màu trang phục (TUYỆT ĐỐI giữ nguyên mặt, mắt, da, tóc thật!)
         for m in meshes:
             bpy.context.view_layer.objects.active = m
             bpy.ops.object.select_all(action="DESELECT")
             m.select_set(True)
             bpy.ops.object.shade_smooth()
-            m_low = m.name.lower()
-            for slot in m.material_slots:
-                mat = slot.material
-                if not mat:
-                    continue
-                low = mat.name.lower() + " " + m_low
-                if any(k in low for k in ("head", "face", "eye", "skin", "teeth", "brow", "lash", "beard")):
-                    continue
-                if top_tint and any(k in low for k in ("top", "shirt", "jacket", "outfit_top", "coat", "body")):
-                    tint_material(mat, top_tint, factor=0.78)
-                elif bottom_tint and any(k in low for k in ("bottom", "pant", "trouser", "shoe", "footwear")):
-                    tint_material(mat, bottom_tint, factor=0.82)
 
-        # Kiểm tra hướng mặt (+Y hay -Y) để luôn đối mặt nhau chính xác
-        pb = arm.pose.bones
-        for b in pb:
-            b.rotation_mode = "QUATERNION"
+        # Đảm bảo tên xương trùng khớp với Action (nhiều bản Mixamo có/không có tiền tố mixamorig:)
+        arm_bone_names = {b.name for b in arm.data.bones}
+        sample_act = next(iter(mocap_actions.values()))[0]
+        act_has_prefix = any("mixamorig:" in fc.data_path for fc in sample_act.fcurves)
+        arm_has_prefix = any("mixamorig:" in bn for bn in arm_bone_names)
+        if act_has_prefix and not arm_has_prefix:
+            for b in arm.data.bones:
+                if not b.name.startswith("mixamorig:"):
+                    b.name = "mixamorig:" + b.name
+        elif not act_has_prefix and arm_has_prefix:
+            for b in arm.data.bones:
+                if b.name.startswith("mixamorig:"):
+                    b.name = b.name.replace("mixamorig:", "", 1)
 
-        def fb(*pats):
-            for pat in pats:
-                p = pat.lower()
-                for b in pb:
-                    bn = b.name.lower().replace("mixamorig:", "")
-                    if bn == p:
-                        return b
-            for pat in pats:
-                p = pat.lower()
-                for b in pb:
-                    bn = b.name.lower().replace("mixamorig:", "")
-                    if p in bn:
-                        return b
-            return None
+        if not arm.animation_data:
+            arm.animation_data_create()
+        print(f"[{name}] Loaded real human Mixamo character: {len(arm.data.bones)} bones, {len(meshes)} meshes", flush=True)
+        return root_empty, arm
 
-        bones = {
-            "hips": fb("hips"),
-            "spine": fb("spine"),
-            "chest": fb("spine2", "spine1", "chest"),
-            "neck": fb("neck"),
-            "head": fb("head"),
-            "ua_r": fb("rightarm", "rightupperarm"),
-            "fa_r": fb("rightforearm", "rightlowerarm"),
-            "hd_r": fb("righthand"),
-            "ua_l": fb("leftarm", "leftupperarm"),
-            "fa_l": fb("leftforearm", "leftlowerarm"),
-            "hd_l": fb("lefthand"),
-            "th_r": fb("rightupleg", "rightupperleg"),
-            "kn_r": fb("rightleg", "rightlowerleg"),
-            "ft_r": fb("rightfoot"),
-            "th_l": fb("leftupleg", "leftupperleg"),
-            "kn_l": fb("leftleg", "leftlowerleg"),
-            "ft_l": fb("leftfoot"),
-        }
-        fingers_r, fingers_l = [], []
-        for b in pb:
-            low = b.name.lower()
-            if any(f in low for f in ("index", "middle", "ring", "pinky", "little", "thumb")):
-                is_th = "thumb" in low
-                if "right" in low:
-                    fingers_r.append((b, is_th))
-                elif "left" in low:
-                    fingers_l.append((b, is_th))
+    hero_root, hero_arm = load_mixamo_character("HoaDo", manifest["hero_fbx"])
+    enemy_root, enemy_arm = load_mixamo_character("MacKhieu", manifest["enemy_fbx"])
 
-        bpy.context.view_layer.update()
-        # Đo hướng mặt theo bàn chân (toe/foot hướng về phía trước)
-        face_dir = 1.0  # +1 nghĩa là mặt đang hướng +Y trong local
-        if bones["ft_r"] and bones["kn_r"]:
-            ft_t = arm.matrix_world @ bones["ft_r"].bone.tail_local
-            ft_h = arm.matrix_world @ bones["ft_r"].bone.head_local
-            face_dir = 1.0 if (ft_t.y - ft_h.y) >= 0 else -1.0
+    # Đặt 2 nhân vật đối mặt nhau trên trục Y (Mixamo FBX mặc định mặt nhìn về -Y)
+    # Hero đứng ở Y=-0.75 quay mặt về +Y (rot Z = 180°); Enemy đứng ở Y=+0.75 quay mặt về -Y (rot Z = 0°)
+    hero_root.location = (0.0, -0.78, 0.0)
+    hero_root.rotation_euler = (0.0, 0.0, math.radians(180.0))
+    enemy_root.location = (0.0, 0.78, 0.0)
+    enemy_root.rotation_euler = (0.0, 0.0, 0.0)
 
-        print(f"[{name}] Loaded human rig: {len(pb)} bones, fingers=({len(fingers_r)},{len(fingers_l)}), face_dir={face_dir}", flush=True)
-        return {
-            "name": name,
-            "root": root_empty,
-            "arm": arm,
-            "bones": bones,
-            "fingers_r": fingers_r,
-            "fingers_l": fingers_l,
-            "face_dir": face_dir,
-        }
+    # --- 4. GHÉP CHUỖI MOTION CAPTURE VÕ THUẬT THẬT BẰNG BLENDER NLA (60 GIÂY = 1440 FRAMES) ---
+    def schedule_nla(arm, sequence):
+        """Nối liên tiếp các clip Motion Capture thật trên NLA với chuyển cảnh mượt (blend_in=6 frame)."""
+        track = arm.animation_data.nla_tracks.new()
+        track.name = "MartialArts_Mocap"
+        cur_frame = 1
+        impact_frames = []
 
-    # Hỏa Đỏ (Người thật trẻ trung, áo khoác đỏ-đen) vs Đối thủ (Người thật mặc đồ chiến thuật đen)
-    hero = load_human_fighter("HoaDo", hero_glb, top_tint=(0.82, 0.08, 0.10, 1.0), bottom_tint=(0.08, 0.08, 0.10, 1.0))
-    enemy = load_human_fighter("MacKhieu", enemy_glb, top_tint=(0.14, 0.12, 0.22, 1.0), bottom_tint=(0.06, 0.06, 0.08, 1.0))
+        for clip_key, is_attack in sequence:
+            if clip_key not in mocap_actions:
+                clip_key = next(iter(mocap_actions.keys()))
+            act, f_len = mocap_actions[clip_key]
+            if cur_frame > TOTAL_FRAMES:
+                break
+            strip = track.strips.new(f"{clip_key}_{cur_frame}", start=cur_frame, action=act)
+            strip.blend_type = "REPLACE"
+            strip.extrapolation = "HOLD_FORWARD"
+            strip.blend_in = min(6, f_len // 4)
+            strip.blend_out = 0
+            if is_attack:
+                impact_frames.append(cur_frame + int(f_len * 0.45))
+            cur_frame += max(18, f_len - 5)
 
-    # Căn hướng đối mặt nhau trên trục Y: Hero đứng ở Y âm nhìn về +Y; Enemy đứng ở Y dương nhìn về -Y
-    hero_base_yaw = 0.0 if hero["face_dir"] > 0 else 180.0
-    enemy_base_yaw = 180.0 if enemy["face_dir"] > 0 else 0.0
+        # Lấp nốt tới frame 1440 bằng idle/knockdown cuối cùng
+        if cur_frame <= TOTAL_FRAMES:
+            last_key = sequence[-1][0] if sequence[-1][0] in mocap_actions else next(iter(mocap_actions.keys()))
+            act, f_len = mocap_actions[last_key]
+            strip = track.strips.new(f"hold_{cur_frame}", start=cur_frame, action=act)
+            strip.repeat = max(1.0, (TOTAL_FRAMES - cur_frame + 10) / max(1, f_len))
+            strip.blend_in = 6
+        return impact_frames
 
-    # --- 3. BỘ BIÊN ĐẠO VÕ THUẬT WORLD-SPACE (0% XUYÊN THÂN + NẮM ĐẤM 10 NGÓN) ---
-    def key_bone_world(fighter, bkey, deg_xyz, frame):
-        bone = fighter["bones"].get(bkey)
-        if bone is None:
-            return
-        # Quy ước chung: +X = gập người/nhấc chân về trước, +Y = nghiêng/dạng ngang, +Z = xoay eo
-        s = fighter["face_dir"]
-        w_rot = Euler((math.radians(deg_xyz[0] * s), math.radians(deg_xyz[1] * s), math.radians(deg_xyz[2])), "XYZ").to_matrix()
-        rest_m = bone.bone.matrix_local.to_3x3()
-        local_m = rest_m.inverted() @ w_rot @ rest_m
-        bone.rotation_quaternion = local_m.to_quaternion()
-        bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    # Biên đạo đối kháng ăn khớp giữa Hỏa Đỏ (tấn công/phản công) và Mạc Khiêu (đỡ/trúng đòn/phản công/gục ngã)
+    hero_seq = [
+        ("idle", False), ("idle", False),
+        ("jab", True), ("cross", True), ("idle", False),
+        ("block", False), ("block", False), ("uppercut", True),
+        ("kick_front", True), ("idle", False), ("kick_spin", True),
+        ("jab", True), ("cross", True), ("block", False),
+        ("hit", False), ("block", False), ("uppercut", True),
+        ("jab", True), ("cross", True), ("kick_front", True),
+        ("kick_spin", True), ("cross", True), ("idle", False),
+    ]
+    enemy_seq = [
+        ("idle", False), ("idle", False),
+        ("block", False), ("hit", False), ("idle", False),
+        ("jab", True), ("cross", True), ("hit", False),
+        ("hit", False), ("idle", False), ("hit", False),
+        ("block", False), ("hit", False), ("kick_front", True),
+        ("cross", True), ("kick_spin", True), ("hit", False),
+        ("hit", False), ("hit", False), ("hit", False),
+        ("hit", False), ("knockdown", False), ("knockdown", False),
+    ]
 
-    def key_fists(fighter, curl, frame):
-        s = fighter["face_dir"]
-        for flist, side in [(fighter["fingers_r"], -1), (fighter["fingers_l"], 1)]:
-            for b, is_th in flist:
-                ang = (22 * curl, 25 * curl * side, 20 * curl * side) if is_th else (0, 70 * curl * side, 0)
-                w_rot = Euler((math.radians(ang[0] * s), math.radians(ang[1] * s), math.radians(ang[2])), "XYZ").to_matrix()
-                rest_m = b.bone.matrix_local.to_3x3()
-                b.rotation_quaternion = (rest_m.inverted() @ w_rot @ rest_m).to_quaternion()
-                b.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    hero_hits = schedule_nla(hero_arm, hero_seq)
+    enemy_hits = schedule_nla(enemy_arm, enemy_seq)
+    all_impact_frames = sorted(set(f for f in (hero_hits + enemy_hits) if 10 < f < TOTAL_FRAMES - 10))
 
-    # Các tư thế võ thuật chuẩn (mọi tay đều mở rõ ngoài thân -> 0% xuyên áo!)
-    POSES = {
-        "stand": {
-            "spine": (0, 0, 0), "chest": (0, 0, 0), "head": (0, 0, 0),
-            "ua_r": (0, -52, 0), "fa_r": (0, 0, -10),
-            "ua_l": (0, 52, 0), "fa_l": (0, 0, 10),
-            "th_r": (0, 8, 0), "kn_r": (0, 0, 0), "th_l": (0, -8, 0), "kn_l": (0, 0, 0),
-        },
-        "guard": {
-            "spine": (6, 0, -18), "chest": (6, 0, -16), "head": (-5, 0, 28),
-            "ua_r": (0, -34, -38), "fa_r": (0, 0, -68),
-            "ua_l": (0, 32, 48), "fa_l": (0, 0, 58),
-            "th_r": (-18, 12, -12), "kn_r": (28, 0, 0),
-            "th_l": (16, -12, 10), "kn_l": (22, 0, 0),
-        },
-        "jab_l": {
-            "spine": (8, 0, 14), "chest": (6, 0, 20), "head": (-4, 0, -24),
-            "ua_r": (0, -40, -24), "fa_r": (0, 0, -82),
-            "ua_l": (0, 12, 82), "fa_l": (0, 0, 8),
-            "th_r": (-14, 12, -10), "kn_r": (24, 0, 0),
-            "th_l": (22, -10, 8), "kn_l": (26, 0, 0),
-        },
-        "cross_r": {
-            "spine": (10, 0, 28), "chest": (8, 0, 26), "head": (-6, 0, -38),
-            "ua_r": (0, -12, -84), "fa_r": (0, 0, -6),
-            "ua_l": (0, 42, 20), "fa_l": (0, 0, 82),
-            "th_r": (-22, 10, -14), "kn_r": (30, 0, 0),
-            "th_l": (20, -12, 10), "kn_l": (24, 0, 0),
-        },
-        "uppercut_r": {
-            "spine": (-6, 0, 26), "chest": (-8, 0, 24), "head": (4, 0, -30),
-            "ua_r": (32, -26, -64), "fa_r": (0, 0, -76),
-            "ua_l": (0, 44, 24), "fa_l": (0, 0, 78),
-            "th_r": (-16, 12, -12), "kn_r": (24, 0, 0),
-            "th_l": (16, -12, 10), "kn_l": (22, 0, 0),
-        },
-        "front_kick_r": {
-            "spine": (-16, 0, -12), "chest": (-12, 0, -10), "head": (12, 0, 14),
-            "ua_r": (0, -38, -28), "fa_r": (0, 0, -72),
-            "ua_l": (0, 38, 34), "fa_l": (0, 0, 68),
-            "th_r": (-86, 6, 0), "kn_r": (10, 0, 0),
-            "th_l": (8, -6, 0), "kn_l": (14, 0, 0),
-        },
-        "roundhouse_r": {
-            "spine": (-12, -26, 36), "chest": (-8, -18, 28), "head": (8, 16, -42),
-            "ua_r": (0, -42, -20), "fa_r": (0, 0, -65),
-            "ua_l": (0, 44, 30), "fa_l": (0, 0, 65),
-            "th_r": (-72, 48, 20), "kn_r": (12, 0, 0),
-            "th_l": (10, -8, -15), "kn_l": (16, 0, 0),
-        },
-        "block": {
-            "spine": (-6, 0, -14), "chest": (-4, 0, -10), "head": (4, 0, 16),
-            "ua_r": (0, -22, -56), "fa_r": (0, 0, -92),
-            "ua_l": (0, 22, 56), "fa_l": (0, 0, 92),
-            "th_r": (-16, 14, -8), "kn_r": (30, 0, 0),
-            "th_l": (14, -14, 8), "kn_l": (26, 0, 0),
-        },
-        "hit_recoil": {
-            "spine": (-22, 0, 18), "chest": (-18, 0, 16), "head": (-18, 0, 22),
-            "ua_r": (0, -28, 14), "fa_r": (0, 0, -35),
-            "ua_l": (0, 28, -14), "fa_l": (0, 0, 35),
-            "th_r": (-10, 12, 0), "kn_r": (20, 0, 0),
-            "th_l": (18, -12, 0), "kn_l": (24, 0, 0),
-        },
-        "kneel_defeat": {
-            "spine": (26, 0, 0), "chest": (22, 0, 0), "head": (18, 0, 0),
-            "ua_r": (0, -48, -18), "fa_r": (0, 0, -22),
-            "ua_l": (0, 48, 18), "fa_l": (0, 0, 22),
-            "th_r": (-76, 10, 0), "kn_r": (92, 0, 0),
-            "th_l": (16, -12, 0), "kn_l": (95, 0, 0),
-        },
-    }
+    # Lưu danh sách frame trúng đòn để tạo tiếng đấm/đá SFX khớp 100%!
+    with open(out_raw_mp4 + ".hits.json", "w", encoding="utf-8") as hf:
+        json.dump(all_impact_frames, hf)
 
-    def apply_pose(fighter, pose_name, frame, loc_xyz=None, yaw_offset=0.0, base_yaw=0.0, fist=1.0):
-        bpy.context.view_layer.objects.active = fighter["arm"]
-        bpy.ops.object.mode_set(mode="POSE")
-        p = POSES[pose_name]
-        for bk, deg in p.items():
-            key_bone_world(fighter, bk, deg, frame)
-        key_fists(fighter, fist, frame)
-        bpy.ops.object.mode_set(mode="OBJECT")
-        if loc_xyz is not None:
-            fighter["root"].location = loc_xyz
-            fighter["root"].keyframe_insert(data_path="location", frame=frame)
-        fighter["root"].rotation_euler = (0, 0, math.radians(base_yaw + yaw_offset))
-        fighter["root"].keyframe_insert(data_path="rotation_euler", frame=frame)
-
-    # Vòng sáng va chạm (Impact Shockwave Ring) bung nổ đúng frame trúng đòn!
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.35, minor_radius=0.03, location=(0, 0, 1.35))
+    # Vòng sóng sáng va chạm (Impact Ring) bung nổ đúng frame trúng đòn
+    bpy.ops.mesh.primitive_torus_add(major_radius=0.32, minor_radius=0.025, location=(0, 0, 1.32))
     spark_ring = bpy.context.active_object
-    spark_ring.name = "ImpactShockwave"
     spark_ring.rotation_euler = (math.radians(90), 0, 0)
     spark_ring.data.materials.append(mat_spark)
     spark_ring.scale = (0.001, 0.001, 0.001)
     spark_ring.keyframe_insert(data_path="scale", frame=1)
-
-    def trigger_impact(frame, pos_xyz):
-        spark_ring.location = pos_xyz
-        spark_ring.keyframe_insert(data_path="location", frame=frame - 1)
+    for fr in all_impact_frames:
         spark_ring.scale = (0.001, 0.001, 0.001)
-        spark_ring.keyframe_insert(data_path="scale", frame=frame - 1)
-        spark_ring.scale = (1.6, 1.6, 1.6)
-        spark_ring.keyframe_insert(data_path="scale", frame=frame + 2)
+        spark_ring.keyframe_insert(data_path="scale", frame=fr - 1)
+        spark_ring.scale = (1.5, 1.5, 1.5)
+        spark_ring.keyframe_insert(data_path="scale", frame=fr + 2)
         spark_ring.scale = (0.001, 0.001, 0.001)
-        spark_ring.keyframe_insert(data_path="scale", frame=frame + 7)
-
-    # --- 4. BIÊN ĐẠO 60 GIÂY (1440 FRAMES) VÕ THUẬT 6 HỒI ---
-    # Hồi 1 (0–10s | f=1..240): Tiến vào đối đầu & vào thế thủ
-    apply_pose(hero, "stand", 1, (0.0, -2.4, 0.0), 0, hero_base_yaw, fist=0.4)
-    apply_pose(enemy, "stand", 1, (0.0, 2.4, 0.0), 0, enemy_base_yaw, fist=0.4)
-    apply_pose(hero, "guard", 120, (0.0, -1.15, 0.0), 0, hero_base_yaw, fist=1.0)
-    apply_pose(enemy, "guard", 120, (0.0, 1.15, 0.0), 0, enemy_base_yaw, fist=1.0)
-    apply_pose(hero, "guard", 220, (0.0, -0.95, 0.0), 8, hero_base_yaw, fist=1.0)
-    apply_pose(enemy, "guard", 220, (0.0, 0.95, 0.0), -8, enemy_base_yaw, fist=1.0)
-
-    # Hồi 2 (10–22s | f=240..528): Loạt đấm Jab-Cross tốc độ cao & đỡ phản công
-    beats_h2 = [
-        (252, "jab_l", (0, -0.78, 0), "block", (0, 0.85, 0), True),
-        (276, "guard", (0, -0.88, 0), "guard", (0, 0.85, 0), False),
-        (300, "cross_r", (0, -0.70, 0), "hit_recoil", (0, 1.08, 0), True),
-        (336, "guard", (0, -0.82, 0), "guard", (0, 1.00, 0), False),
-        (372, "block", (0, -0.92, 0), "jab_l", (0, 0.72, 0), True),
-        (408, "block", (0, -1.02, 0), "cross_r", (0, 0.65, 0), True),
-        (444, "uppercut_r", (0, -0.72, 0), "hit_recoil", (0, 1.10, 0), True),
-        (492, "guard", (0, -0.95, 0), "guard", (0, 1.05, 0), False),
-    ]
-    for fr, hp, hl, ep, el, imp in beats_h2:
-        apply_pose(hero, hp, fr, hl, 0, hero_base_yaw)
-        apply_pose(enemy, ep, fr, el, 0, enemy_base_yaw)
-        if imp:
-            trigger_impact(fr, (0.0, 0.5 * (hl[1] + el[1]), 1.38))
-
-    # Hồi 3 (22–34s | f=528..816): Đá tống trực diện & Đá vòng cầu xoay người (Roundhouse Kick)
-    beats_h3 = [
-        (552, "front_kick_r", (0, -0.75, 0), "hit_recoil", (0, 1.25, 0), True),
-        (595, "guard", (0, -0.95, 0), "guard", (0, 1.25, 0), False),
-        (640, "jab_l", (0, -0.70, 0), "block", (0, 0.90, 0), True),
-        (676, "roundhouse_r", (0, -0.68, 0), "hit_recoil", (0, 1.40, 0), True),
-        (730, "guard", (0, -0.90, 0), "guard", (0, 1.35, 0), False),
-        (775, "cross_r", (0, -0.72, 0), "block", (0, 0.92, 0), True),
-        (810, "guard", (0, -0.95, 0), "guard", (0, 1.00, 0), False),
-    ]
-    for fr, hp, hl, ep, el, imp in beats_h3:
-        apply_pose(hero, hp, fr, hl, 0, hero_base_yaw)
-        apply_pose(enemy, ep, fr, el, 0, enemy_base_yaw)
-        if imp:
-            trigger_impact(fr, (0.0, 0.5 * (hl[1] + el[1]), 1.32))
-
-    # Hồi 4 (34–46s | f=816..1104): Mạc Khiêu phản công dồn ép Hỏa Đỏ -> Hỏa Đỏ gạt đòn phản kích
-    beats_h4 = [
-        (850, "block", (0, -1.10, 0), "jab_l", (0, 0.65, 0), True),
-        (884, "hit_recoil", (0, -1.45, 0), "cross_r", (0, 0.45, 0), True),
-        (924, "block", (0, -1.50, 0), "front_kick_r", (0, 0.40, 0), True),
-        (968, "guard", (0, -1.35, 0), "guard", (0, 0.70, 0), False),
-        (1012, "block", (0, -1.20, 0), "roundhouse_r", (0, 0.55, 0), True),
-        (1056, "uppercut_r", (0, -0.80, 0), "hit_recoil", (0, 1.05, 0), True),
-        (1096, "guard", (0, -0.95, 0), "guard", (0, 1.15, 0), False),
-    ]
-    for fr, hp, hl, ep, el, imp in beats_h4:
-        apply_pose(hero, hp, fr, hl, 0, hero_base_yaw)
-        apply_pose(enemy, ep, fr, el, 0, enemy_base_yaw)
-        if imp:
-            trigger_impact(fr, (0.0, 0.5 * (hl[1] + el[1]), 1.35))
-
-    # Hồi 5 (46–55s | f=1104..1320): Liên hoàn Hỏa Quyền kết liễu (Jab -> Cross -> Uppercut -> Roundhouse -> Finisher)
-    beats_h5 = [
-        (1136, "jab_l", (0, -0.72, 0), "hit_recoil", (0, 0.95, 0), True),
-        (1168, "cross_r", (0, -0.62, 0), "hit_recoil", (0, 1.12, 0), True),
-        (1204, "uppercut_r", (0, -0.58, 0), "hit_recoil", (0, 1.28, 0), True),
-        (1248, "roundhouse_r", (0, -0.65, 0), "hit_recoil", (0, 1.55, 0), True),
-        (1292, "cross_r", (0, -0.45, 0), "hit_recoil", (0, 1.85, 0), True),
-    ]
-    for fr, hp, hl, ep, el, imp in beats_h5:
-        apply_pose(hero, hp, fr, hl, 0, hero_base_yaw)
-        apply_pose(enemy, ep, fr, el, 0, enemy_base_yaw)
-        if imp:
-            trigger_impact(fr, (0.0, 0.5 * (hl[1] + el[1]), 1.40))
-
-    # Hồi 6 (55–60s | f=1320..1440): Mạc Khiêu khuỵu gối thua cuộc, Hỏa Đỏ đứng hiên ngang thắng lợi
-    apply_pose(hero, "guard", 1348, (0.0, -0.65, 0.0), 0, hero_base_yaw, fist=1.0)
-    apply_pose(enemy, "kneel_defeat", 1356, (0.0, 1.95, -0.42), 0, enemy_base_yaw, fist=0.5)
-    apply_pose(hero, "stand", 1440, (0.0, -0.65, 0.0), 12, hero_base_yaw, fist=0.8)
-    apply_pose(enemy, "kneel_defeat", 1440, (0.0, 1.95, -0.42), 0, enemy_base_yaw, fist=0.5)
+        spark_ring.keyframe_insert(data_path="scale", frame=fr + 6)
 
     # --- 5. ÁNH SÁNG ĐIỆN ẢNH 3 ĐIỂM + RIM LIGHT ---
     if scene.world is None:
@@ -449,7 +395,7 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
     bg = scene.world.node_tree.nodes.get("Background")
     if bg:
         bg.inputs[0].default_value = (0.02, 0.025, 0.04, 1.0)
-        bg.inputs[1].default_value = 0.75
+        bg.inputs[1].default_value = 0.8
 
     def add_light(name, loc, rot_deg, energy, color, size=2.5):
         bpy.ops.object.light_add(type="AREA", location=loc, rotation=tuple(math.radians(a) for a in rot_deg))
@@ -459,20 +405,19 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
         l.data.color = color
         l.data.size = size
 
-    add_light("Key_Main", (3.5, -2.5, 3.6), (55, 0, 52), 340.0, (1.0, 0.94, 0.88), 3.0)
-    add_light("Fill_Cool", (-3.5, 1.5, 2.8), (64, 0, -115), 180.0, (0.72, 0.84, 1.0), 3.2)
-    add_light("Rim_Red", (-2.2, -4.5, 2.6), (68, 0, -25), 420.0, (1.0, 0.22, 0.10), 2.2)
-    add_light("Rim_Blue", (2.2, 4.5, 2.6), (-68, 0, 25), 380.0, (0.12, 0.72, 1.0), 2.2)
+    add_light("Key_Main", (3.4, -2.4, 3.6), (55, 0, 52), 340.0, (1.0, 0.94, 0.88), 3.0)
+    add_light("Fill_Cool", (-3.4, 1.6, 2.8), (64, 0, -115), 190.0, (0.76, 0.86, 1.0), 3.2)
+    add_light("Rim_Red", (-2.2, -4.4, 2.5), (68, 0, -25), 400.0, (1.0, 0.22, 0.10), 2.2)
+    add_light("Rim_Blue", (2.2, 4.4, 2.5), (-68, 0, 25), 360.0, (0.12, 0.72, 1.0), 2.2)
 
     # --- 6. 8 GÓC MÁY HÀNH ĐỘNG ĐIỆN ẢNH CẮT CẢNH LIÊN TỤC TRONG 60 GIÂY ---
     mid_tgt = bpy.data.objects.new("FightCenter", None)
     scene.collection.objects.link(mid_tgt)
-    mid_tgt.location = (0.0, 0.1, 1.25)
+    mid_tgt.location = (0.0, 0.0, 1.15)
 
-    hero_head_tgt = bpy.data.objects.new("HeroHeadTarget", None)
-    scene.collection.objects.link(hero_head_tgt)
-    hero_head_tgt.parent = hero["root"]
-    hero_head_tgt.location = (0.0, 0.0, 1.50)
+    hero_face_tgt = bpy.data.objects.new("HeroFaceTarget", None)
+    scene.collection.objects.link(hero_face_tgt)
+    hero_face_tgt.location = (0.0, -0.75, 1.48)
 
     def make_cam(name, p1, p2, f1, f2, tgt, lens=38.0):
         bpy.ops.object.camera_add(location=p1)
@@ -490,31 +435,29 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
         return c
 
     cam_schedule = [
-        (1, make_cam("C1_WideIntro", (3.6, -1.2, 1.35), (3.1, 0.4, 1.45), 1, 144, mid_tgt, 34.0)),
-        (145, make_cam("C2_HeroClose", (1.1, 0.6, 1.45), (0.85, 0.2, 1.52), 145, 240, hero_head_tgt, 52.0)),
-        (241, make_cam("C3_SideActionR", (3.0, 0.0, 1.25), (2.7, 0.6, 1.35), 241, 420, mid_tgt, 38.0)),
-        (421, make_cam("C4_LowKickL", (-2.8, -0.4, 0.72), (-2.6, 0.9, 0.95), 421, 660, mid_tgt, 35.0)),
-        (661, make_cam("C5_OverShoulder", (-1.5, -2.5, 1.55), (-1.1, -1.9, 1.48), 661, 840, mid_tgt, 40.0)),
-        (841, make_cam("C6_CounterR", (2.9, -1.0, 1.15), (2.6, -0.2, 1.35), 841, 1080, mid_tgt, 36.0)),
-        (1081, make_cam("C7_FinisherDash", (-2.4, 0.8, 0.85), (2.2, 1.1, 1.15), 1081, 1320, mid_tgt, 38.0)),
-        (1321, make_cam("C8_VictoryHero", (1.5, 0.9, 1.05), (-1.2, 0.8, 1.42), 1321, 1440, hero_head_tgt, 45.0)),
+        (1, make_cam("C1_WideIntro", (3.5, -1.2, 1.35), (3.0, 0.4, 1.42), 1, 160, mid_tgt, 35.0)),
+        (161, make_cam("C2_HeroClose", (1.1, 0.55, 1.45), (0.85, 0.15, 1.50), 161, 260, hero_face_tgt, 50.0)),
+        (261, make_cam("C3_SideActionR", (2.9, -0.2, 1.25), (2.6, 0.5, 1.32), 261, 460, mid_tgt, 38.0)),
+        (461, make_cam("C4_LowKickL", (-2.7, -0.5, 0.72), (-2.5, 0.8, 0.98), 461, 680, mid_tgt, 36.0)),
+        (681, make_cam("C5_OverShoulder", (-1.5, -2.4, 1.52), (-1.1, -1.8, 1.45), 681, 880, mid_tgt, 40.0)),
+        (881, make_cam("C6_CounterR", (2.8, -0.9, 1.15), (2.5, -0.1, 1.32), 881, 1100, mid_tgt, 36.0)),
+        (1101, make_cam("C7_FinisherSweep", (-2.4, 0.8, 0.85), (2.2, 1.0, 1.18), 1101, 1320, mid_tgt, 38.0)),
+        (1321, make_cam("C8_VictoryHero", (1.5, 0.9, 1.05), (-1.2, 0.8, 1.42), 1321, 1440, hero_face_tgt, 45.0)),
     ]
     scene.camera = cam_schedule[0][1]
     for fstart, cam_obj in cam_schedule:
         mk = scene.timeline_markers.new(cam_obj.name, frame=fstart)
         mk.camera = cam_obj
 
-    # --- 7. RENDER CYCLES GPU SIÊU TỐC CHO 1 PHÚT (OPTIX GPU DENOISER -> ~0.2s/frame, ~3-5 PHÚT XONG!) ---
+    # --- 7. RENDER CYCLES GPU SIÊU TỐC (OPTIX RAYTRACING, KHÔNG CPU DENOISE -> ~0.5s/frame) ---
     scene.render.engine = "CYCLES"
     scene.render.use_persistent_data = True
-    scene.cycles.samples = 8
     scene.cycles.max_bounces = 3
     scene.cycles.diffuse_bounces = 1
     scene.cycles.glossy_bounces = 1
     scene.cycles.transmission_bounces = 0
     scene.cycles.volume_bounces = 0
     gpu_names = []
-    use_optix = False
     try:
         prefs = bpy.context.preferences.addons["cycles"].preferences
         for dev_type in ("OPTIX", "CUDA"):
@@ -526,7 +469,6 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
                     for d in prefs.devices:
                         d.use = (d.type != "CPU")
                     gpu_names = [f"{d.name} ({dev_type})" for d in devs]
-                    use_optix = (dev_type == "OPTIX")
                     break
             except Exception:
                 continue
@@ -534,7 +476,6 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
     except Exception:
         scene.cycles.device = "CPU"
 
-    # Tắt denoiser để tránh cả lỗi Failed to create OptiX denoiser lẫn nghẽn CPU 25s/frame trên Colab
     scene.cycles.use_denoising = False
     scene.cycles.samples = 12
     scene.cycles.use_adaptive_sampling = True
@@ -549,40 +490,15 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
     scene.render.ffmpeg.constant_rate_factor = "MEDIUM"
     scene.render.filepath = out_raw_mp4
     os.makedirs(os.path.dirname(out_raw_mp4), exist_ok=True)
-    print(f"Đang render 1 phút võ thuật 3D ({TOTAL_FRAMES} frames @ 1280x720 Cycles GPU)...", flush=True)
+    print(f"Đang render 1 phút võ thuật Motion Capture thật ({TOTAL_FRAMES} frames @ 1280x720)...", flush=True)
     bpy.ops.render.render(animation=True)
     print("-> Render Blender hoàn tất:", out_raw_mp4, flush=True)
 
 
-def download_file(urls, dest_path, label):
-    if isinstance(urls, str):
-        urls = [urls]
-    if os.path.exists(dest_path) and os.path.getsize(dest_path) > 300_000:
-        return
-    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    last_err = None
-    for url in urls:
-        try:
-            print(f"Đang tải {label} từ {url}...", flush=True)
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=60) as resp, open(dest_path, "wb") as f:
-                f.write(resp.read())
-            if os.path.getsize(dest_path) > 300_000:
-                print(f"-> Xong {label} ({os.path.getsize(dest_path)/1024/1024:.2f} MB)", flush=True)
-                return
-        except Exception as e:
-            last_err = e
-            print(f"  Bỏ qua link lỗi ({e}), thử link dự phòng...", flush=True)
-    raise RuntimeError(f"Không tải được {label}: {last_err}")
-
-
-def generate_impact_sfx_track(out_wav, duration_sec=60.0):
-    """Tạo track âm thanh tiếng đấm/đá (Impact Punch/Kick SFX) khớp chính xác từng frame trúng đòn."""
+def generate_impact_sfx_track(out_wav, hit_frames, duration_sec=60.0):
     sr = 44100
     n_samples = int(sr * duration_sec)
     buf = [0.0] * n_samples
-    hit_frames = [252, 300, 372, 408, 444, 552, 640, 676, 775, 850, 884, 924, 1012, 1056, 1136, 1168, 1204, 1248, 1292]
-    import random
     rng = random.Random(2026)
     for fr in hit_frames:
         start = int((fr / 24.0) * sr)
@@ -601,12 +517,10 @@ def generate_impact_sfx_track(out_wav, duration_sec=60.0):
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(sr)
-        frames_bytes = b"".join(struct.pack("<h", int(s * 32000)) for s in buf)
-        wf.writeframes(frames_bytes)
+        wf.writeframes(b"".join(struct.pack("<h", int(s * 32000)) for s in buf))
 
 
 def synth_dialogue_lines(tmp_dir):
-    """Tạo các câu thoại tiếng Việt cho Hỏa Đỏ và Mạc Khiêu đúng nhịp trận đấu 60 giây."""
     lines = [
         (2.0, "vi-VN-NamMinhNeural", "+4%", "-2Hz", "Mạc Khiêu! Đứng lại! Hôm nay ta sẽ không để ngươi thoát đâu!"),
         (6.8, "vi-VN-NamMinhNeural", "-6%", "-12Hz", "Chưa biến thân mà dám cản đường ta sao? Nực cười!"),
@@ -671,40 +585,33 @@ def mux_full_audio(raw_mp4, sfx_wav, dialogue_items, final_mp4):
 def main():
     if "--blender-render" in sys.argv:
         idx = sys.argv.index("--blender-render")
-        run_blender_martial_arts(sys.argv[idx + 1], sys.argv[idx + 2], sys.argv[idx + 3])
+        run_blender_mocap_fight(sys.argv[idx + 1], sys.argv[idx + 2])
         return
 
-    models_dir = "/content/Test/assets/models_3d"
+    work_dir = "/content/Test/assets/models_3d"
     out_dir = "/content/Test/build_output"
-    os.makedirs(models_dir, exist_ok=True)
+    os.makedirs(work_dir, exist_ok=True)
     os.makedirs(out_dir, exist_ok=True)
 
-    hero_glb = os.path.join(models_dir, "human_hero_male.glb")
-    enemy_glb = os.path.join(models_dir, "human_enemy_soldier.glb")
-    raw_mp4 = os.path.join(out_dir, "demo_martial_arts_1min_raw.mp4")
-    sfx_wav = os.path.join(out_dir, "demo_martial_arts_sfx.wav")
+    manifest = download_mixamo_assets(work_dir)
+    manifest_path = os.path.join(work_dir, "mixamo_manifest.json")
+    raw_mp4 = os.path.join(out_dir, "demo_mocap_1min_raw.mp4")
+    sfx_wav = os.path.join(out_dir, "demo_mocap_sfx.wav")
     final_mp4 = os.path.join(out_dir, "demo_sentai_3d_scene.mp4")
-
-    download_file([
-        "https://raw.githubusercontent.com/readyplayerme/visage/main/public/male.glb",
-        "https://raw.githubusercontent.com/readyplayerme/visage/master/public/male.glb",
-        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
-    ], hero_glb, "Nhân vật người thật Hỏa Đỏ")
-    download_file([
-        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
-    ], enemy_glb, "Nhân vật người thật Đối thủ (Mạc Khiêu)")
 
     cmd = [
         "/content/blender/blender", "--background",
         "--python", os.path.abspath(__file__), "--",
-        "--blender-render", hero_glb, enemy_glb, raw_mp4,
+        "--blender-render", manifest_path, raw_mp4,
     ]
     subprocess.run(cmd, check=True)
 
-    generate_impact_sfx_track(sfx_wav, duration_sec=60.0)
+    hits_json = raw_mp4 + ".hits.json"
+    hit_frames = json.load(open(hits_json, "r", encoding="utf-8")) if os.path.exists(hits_json) else []
+    generate_impact_sfx_track(sfx_wav, hit_frames, duration_sec=60.0)
     dialogue_items = synth_dialogue_lines(out_dir)
     mux_full_audio(raw_mp4, sfx_wav, dialogue_items, final_mp4)
-    print(f"HOÀN TẤT VIDEO VÕ THUẬT 1 PHÚT: {final_mp4} ({os.path.getsize(final_mp4)/1024/1024:.2f} MB)", flush=True)
+    print(f"HOÀN TẤT VIDEO VÕ THUẬT MOCAP THẬT 1 PHÚT: {final_mp4} ({os.path.getsize(final_mp4)/1024/1024:.2f} MB)", flush=True)
 
 
 if __name__ == "__main__":
