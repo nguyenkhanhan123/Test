@@ -504,27 +504,44 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
         mk = scene.timeline_markers.new(cam_obj.name, frame=fstart)
         mk.camera = cam_obj
 
-    # --- 7. RENDER CYCLES GPU TỐI ƯU TỐC ĐỘ CHO 1 PHÚT (1440 FRAMES @ 720p) ---
+    # --- 7. RENDER CYCLES GPU SIÊU TỐC CHO 1 PHÚT (OPTIX GPU DENOISER -> ~0.2s/frame, ~3-5 PHÚT XONG!) ---
     scene.render.engine = "CYCLES"
     scene.render.use_persistent_data = True
-    scene.cycles.samples = 12
-    scene.cycles.use_denoising = True
-    scene.cycles.max_bounces = 4
-    scene.cycles.diffuse_bounces = 2
-    scene.cycles.glossy_bounces = 2
+    scene.cycles.samples = 8
+    scene.cycles.max_bounces = 3
+    scene.cycles.diffuse_bounces = 1
+    scene.cycles.glossy_bounces = 1
+    scene.cycles.transmission_bounces = 0
+    scene.cycles.volume_bounces = 0
     gpu_names = []
+    use_optix = False
     try:
         prefs = bpy.context.preferences.addons["cycles"].preferences
-        prefs.compute_device_type = "CUDA"
-        prefs.get_devices()
-        for dev in prefs.devices:
-            dev.use = True
-            if dev.type != "CPU":
-                gpu_names.append(dev.name)
-        scene.cycles.device = "GPU"
+        for dev_type in ("OPTIX", "CUDA"):
+            try:
+                prefs.compute_device_type = dev_type
+                prefs.get_devices()
+                devs = [d for d in prefs.devices if d.type != "CPU"]
+                if devs:
+                    for d in prefs.devices:
+                        d.use = (d.type != "CPU")
+                    gpu_names = [f"{d.name} ({dev_type})" for d in devs]
+                    use_optix = (dev_type == "OPTIX")
+                    break
+            except Exception:
+                continue
+        scene.cycles.device = "GPU" if gpu_names else "CPU"
     except Exception:
         scene.cycles.device = "CPU"
-    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Cycles device={scene.cycles.device}", flush=True)
+
+    # QUAN TRỌNG: TUYỆT ĐỐI KHÔNG dùng CPU OpenImageDenoise (tốn 25s/frame trên Colab 2-core CPU!)
+    if use_optix:
+        scene.cycles.use_denoising = True
+        scene.cycles.denoiser = "OPTIX"
+    else:
+        scene.cycles.use_denoising = False
+        scene.cycles.samples = 12
+    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Denoise={'OPTIX-GPU' if use_optix else 'OFF'}", flush=True)
 
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
