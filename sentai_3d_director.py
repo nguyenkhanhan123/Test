@@ -506,20 +506,25 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
 
     # --- 7. RENDER CYCLES GPU TỐI ƯU TỐC ĐỘ CHO 1 PHÚT (1440 FRAMES @ 720p) ---
     scene.render.engine = "CYCLES"
+    scene.render.use_persistent_data = True
     scene.cycles.samples = 12
     scene.cycles.use_denoising = True
     scene.cycles.max_bounces = 4
     scene.cycles.diffuse_bounces = 2
     scene.cycles.glossy_bounces = 2
+    gpu_names = []
     try:
         prefs = bpy.context.preferences.addons["cycles"].preferences
         prefs.compute_device_type = "CUDA"
         prefs.get_devices()
         for dev in prefs.devices:
             dev.use = True
+            if dev.type != "CPU":
+                gpu_names.append(dev.name)
         scene.cycles.device = "GPU"
     except Exception:
         scene.cycles.device = "CPU"
+    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Cycles device={scene.cycles.device}", flush=True)
 
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
