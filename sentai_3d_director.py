@@ -534,15 +534,26 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
     print("-> Render Blender hoàn tất:", out_raw_mp4, flush=True)
 
 
-def download_file(url, dest_path, label):
+def download_file(urls, dest_path, label):
+    if isinstance(urls, str):
+        urls = [urls]
     if os.path.exists(dest_path) and os.path.getsize(dest_path) > 300_000:
         return
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    print(f"Đang tải {label}...", flush=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(dest_path, "wb") as f:
-        f.write(resp.read())
-    print(f"-> Xong {label} ({os.path.getsize(dest_path)/1024/1024:.2f} MB)", flush=True)
+    last_err = None
+    for url in urls:
+        try:
+            print(f"Đang tải {label} từ {url}...", flush=True)
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp, open(dest_path, "wb") as f:
+                f.write(resp.read())
+            if os.path.getsize(dest_path) > 300_000:
+                print(f"-> Xong {label} ({os.path.getsize(dest_path)/1024/1024:.2f} MB)", flush=True)
+                return
+        except Exception as e:
+            last_err = e
+            print(f"  Bỏ qua link lỗi ({e}), thử link dự phòng...", flush=True)
+    raise RuntimeError(f"Không tải được {label}: {last_err}")
 
 
 def generate_impact_sfx_track(out_wav, duration_sec=60.0):
@@ -654,8 +665,14 @@ def main():
     sfx_wav = os.path.join(out_dir, "demo_martial_arts_sfx.wav")
     final_mp4 = os.path.join(out_dir, "demo_sentai_3d_scene.mp4")
 
-    download_file("https://readyplayerme.github.io/visage/male.glb", hero_glb, "Nhân vật người thật Hỏa Đỏ (Ready Player Me Male)")
-    download_file("https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb", enemy_glb, "Nhân vật người thật Đối thủ (Soldier)")
+    download_file([
+        "https://raw.githubusercontent.com/readyplayerme/visage/main/public/male.glb",
+        "https://raw.githubusercontent.com/readyplayerme/visage/master/public/male.glb",
+        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
+    ], hero_glb, "Nhân vật người thật Hỏa Đỏ")
+    download_file([
+        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Soldier.glb",
+    ], enemy_glb, "Nhân vật người thật Đối thủ (Mạc Khiêu)")
 
     cmd = [
         "/content/blender/blender", "--background",
