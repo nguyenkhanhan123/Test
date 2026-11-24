@@ -1,15 +1,16 @@
-"""
-Sentai 3D Director — Cảnh Võ Thuật NGƯỜI THẬT 1 Phút (60 giây, 720p 24fps)
-Dùng 100% NHÂN VẬT NGƯỜI THẬT + MOTION CAPTURE VÕ THUẬT THẬT TỪ MIXAMO (tự tải từ Hugging Face):
-- Dataset: Linzhan/Mixamo-Animations-Characters (114 nhân vật chuẩn Rig + 2.317 file Motion Capture .fbx thật!)
-- Không tự viết tay góc xoay xương -> chân bám chặt mặt đất, đấm/đá xoay/né đòn/trúng đòn thật 100% như diễn viên đóng thế!
-- Tự động nối mượt các clip .fbx bằng Blender NLA (blend_in=6 frame) suốt 60 giây + 8 góc máy hành động + SFX & thoại tiếng Việt!
+r"""
+Sentai 3D Director — Cảnh Rượt Đuổi Parkour Nhảy Qua Các Tòa Nhà Đêm (30 giây, 720p 24fps)
+- 2 nhân vật NGƯỜI THẬT Mixamo (chuẩn hóa sạch mọi tiền tố xương mixamorig\d*: -> 100% cả 2 cùng cử động!)
+- Motion Capture Parkour thật từ Mixamo (Hugging Face): Running/Fast_Run + Running_Jump + Forward_Roll
+- 4 nóc tòa nhà cao tầng có khe hở 3.5–4.0m giữa bầu trời đêm thành phố neon + quỹ đạo nhảy parabol thật
+- 6 góc máy rượt đuổi điện ảnh (Drone bám ngang, Góc nhảy vọt qua đầu camera, Góc đuổi sau lưng) + thoại Việt & SFX
 """
 import asyncio
 import json
 import math
 import os
 import random
+import re
 import shutil
 import struct
 import subprocess
@@ -17,17 +18,21 @@ import sys
 import wave
 
 
-def download_mixamo_assets(work_dir):
-    """Tự động tải 2 nhân vật người thật + bộ Motion Capture võ thuật thật (.fbx) từ Hugging Face Mixamo dataset."""
+def download_parkour_assets(work_dir):
+    """Tự động tải 2 nhân vật người thật + bộ Motion Capture Parkour (chạy, nhảy, lộn nhào) từ Hugging Face Mixamo."""
     from huggingface_hub import HfApi, hf_hub_download
 
-    manifest_path = os.path.join(work_dir, "mixamo_manifest.json")
+    manifest_path = os.path.join(work_dir, "parkour_manifest.json")
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        hero_ok = os.path.exists(data.get("hero_fbx", "")) and "remy" not in data.get("hero_fbx", "").lower()
-        if hero_ok and os.path.exists(data.get("enemy_fbx", "")) and len(data.get("anims", {})) >= 5:
-            print("Dùng lại bộ nhân vật & Motion Capture Mixamo đã tải sẵn!", flush=True)
+        if (
+            os.path.exists(data.get("hero_fbx", ""))
+            and os.path.exists(data.get("enemy_fbx", ""))
+            and all(os.path.exists(p) for p in data.get("anims", {}).values())
+            and len(data.get("anims", {})) >= 3
+        ):
+            print("Dùng lại bộ nhân vật & Motion Capture Parkour đã tải sẵn!", flush=True)
             return data
 
     api = HfApi()
@@ -35,7 +40,7 @@ def download_mixamo_assets(work_dir):
     files = []
     for cand in ("Linzhan/Mixamo-Animations-Characters", "tanish434/Mixamo-Animations-Characters"):
         try:
-            print(f"Đang quét kho Mixamo Motion Capture trên Hugging Face ({cand})...", flush=True)
+            print(f"Đang quét kho Mixamo Parkour trên Hugging Face ({cand})...", flush=True)
             files = api.list_repo_files(repo_id=cand, repo_type="dataset")
             if files:
                 repo_id = cand
@@ -46,7 +51,6 @@ def download_mixamo_assets(work_dir):
     if not repo_id or not files:
         raise RuntimeError("Không truy cập được kho Mixamo trên Hugging Face.")
 
-    # 1. Chọn 2 nhân vật NGƯỜI THẬT NAM từ character_refined/ (hoặc character/)
     char_fbxs = [f for f in files if f.lower().endswith(".fbx") and ("character_refined/" in f.lower() or f.lower().startswith("character/"))]
     if not char_fbxs:
         char_fbxs = [f for f in files if f.lower().endswith(".fbx") and "character" in f.lower()]
@@ -56,23 +60,19 @@ def download_mixamo_assets(work_dir):
             for f in char_fbxs:
                 if f == exclude:
                     continue
-                base = os.path.basename(f).lower()
-                if name.lower() in base:
+                if name.lower() in os.path.basename(f).lower():
                     return f
-        # Fallback: lấy file fbx đầu tiên khác exclude
         for f in char_fbxs:
             if f != exclude:
                 return f
         return None
 
+    # Chọn 2 nhân vật người nam trưởng thành cân đối (ưu tiên character_refined trước)
+    char_fbxs.sort(key=lambda x: (0 if "character_refined" in x.lower() else 1, x))
     hero_remote = pick_char(["david", "douglas", "leonard", "adam", "james", "brian", "malcolm", "bryce", "ch14", "ch17", "ch31"])
-    enemy_remote = pick_char(["swat", "soldier", "malcolm", "douglas", "leonard", "brian", "david", "josh", "pete", "ch15", "ch33"], exclude=hero_remote)
-    if not hero_remote or not enemy_remote:
-        raise RuntimeError(f"Không tìm thấy đủ 2 file nhân vật FBX trong {repo_id}.")
+    enemy_remote = pick_char(["swat", "soldier", "malcolm", "douglas", "leonard", "brian", "josh", "pete", "ch15", "ch33"], exclude=hero_remote)
 
-    # 2. Chọn bộ file MOTION CAPTURE VÕ THUẬT THẬT (.fbx)
     anim_fbxs = [f for f in files if f.lower().endswith(".fbx") and "animation" in f.lower()]
-    # Ưu tiên thư mục animation_motion_ybot hoặc animation/ chuẩn nhất
     ybot_anims = [f for f in anim_fbxs if "ybot" in f.lower()]
     if len(ybot_anims) > 100:
         anim_fbxs = ybot_anims
@@ -87,7 +87,6 @@ def download_mixamo_assets(work_dir):
                 if k in base:
                     used_set.add(f)
                     return f
-        # Nếu trùng used_set thì cho phép dùng lại
         for kw in keywords:
             k = kw.lower()
             for f in anim_fbxs:
@@ -98,47 +97,45 @@ def download_mixamo_assets(work_dir):
 
     used = set()
     anim_queries = {
-        "idle": ["fight idle", "fighting idle", "bouncing fight", "boxing idle", "combat idle", "idle"],
-        "jab": ["lead jab", "jab", "punching", "boxing", "punch"],
-        "cross": ["cross punch", "hook punch", "right hook", "punch combo", "hook", "punch"],
-        "uppercut": ["uppercut", "elbow punch", "punch to elbow", "quad punch", "boxing"],
-        "kick_front": ["mma kick", "front kick", "push kick", "kicking", "kick"],
-        "kick_spin": ["roundhouse kick", "hurricane kick", "flying kick", "spinning", "martelo", "kick"],
-        "block": ["center block", "body block", "block", "dodging", "dodge"],
-        "hit": ["hit to body", "head hit", "stomach hit", "kidney hit", "reaction", "hit"],
-        "knockdown": ["knocked down", "falling back", "fall flat", "dying", "defeat", "hit"],
+        "run": ["fast run", "sprinting", "running", "run forward", "jog"],
+        "jump": ["running jump", "jump over", "big jump", "jumping", "jump"],
+        "roll": ["sprinting forward roll", "falling to roll", "stand to roll", "roll", "landing"],
     }
-
     selected_anims_remote = {}
     for slot, kws in anim_queries.items():
         found = pick_anim(kws, used)
         if found:
             selected_anims_remote[slot] = found
 
-    print(f"Nhân vật Hero:  {hero_remote}", flush=True)
-    print(f"Nhân vật Enemy: {enemy_remote}", flush=True)
-    print(f"Đã chọn {len(selected_anims_remote)} động tác Motion Capture võ thuật thật:", flush=True)
+    print(f"Hero (người đuổi):  {hero_remote}", flush=True)
+    print(f"Enemy (người chạy): {enemy_remote}", flush=True)
+    print("Động tác Parkour Motion Capture thật:", flush=True)
     for k, v in selected_anims_remote.items():
-        print(f"  - {k:10s}: {os.path.basename(v)}", flush=True)
+        print(f"  - {k:6s}: {os.path.basename(v)}", flush=True)
 
-    # Tải các file đã chọn về ổ đĩa Colab
     local_dir = os.path.join(work_dir, "mixamo_cache")
     os.makedirs(local_dir, exist_ok=True)
 
     def fetch(remote_path):
         return hf_hub_download(repo_id=repo_id, filename=remote_path, repo_type="dataset", local_dir=local_dir)
 
-    hero_fbx = fetch(hero_remote)
-    enemy_fbx = fetch(enemy_remote)
-    anims_local = {k: fetch(v) for k, v in selected_anims_remote.items()}
-
-    manifest = {"hero_fbx": hero_fbx, "enemy_fbx": enemy_fbx, "anims": anims_local}
+    manifest = {
+        "hero_fbx": fetch(hero_remote),
+        "enemy_fbx": fetch(enemy_remote),
+        "anims": {k: fetch(v) for k, v in selected_anims_remote.items()},
+    }
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
     return manifest
 
 
-def run_blender_mocap_fight(manifest_path, out_raw_mp4):
+def _norm_mixamo_bone(name):
+    """Chuẩn hóa MỌI biến thể tên xương Mixamo (mixamorig1:Hips, mixamorig9:Spine, Hips -> mixamorig:Hips)."""
+    clean = re.sub(r"^mixamorig\d*:", "", name)
+    return "mixamorig:" + clean
+
+
+def run_blender_rooftop_chase(manifest_path, out_raw_mp4):
     import bpy
     from mathutils import Vector
 
@@ -148,7 +145,7 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     FPS = 24
-    TOTAL_FRAMES = 60 * FPS  # 1440 frames = 60 giây chuẩn
+    TOTAL_FRAMES = 30 * FPS  # 720 frames = 30 giây tốc độ cao, render siêu nhanh!
     scene.frame_start = 1
     scene.frame_end = TOTAL_FRAMES
     scene.render.fps = FPS
@@ -166,92 +163,116 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
                 bsdf.inputs["Emission Strength"].default_value = em_strength
         return mat
 
-    # --- 1. BỐI CẢNH ĐẤU TRƯỜNG SÂN THƯỢNG ĐÊM 3D ---
-    mat_floor = make_pbr_mat("Rooftop_Floor", (0.03, 0.035, 0.045, 1.0), metallic=0.18, roughness=0.26)
-    mat_concrete = make_pbr_mat("Concrete_Wall", (0.07, 0.075, 0.09, 1.0), metallic=0.12, roughness=0.65)
-    mat_neon_red = make_pbr_mat("Neon_Red", (1.0, 0.10, 0.05, 1.0), metallic=0.1, roughness=0.2, emission=(1.0, 0.14, 0.05, 1.0), em_strength=10.0)
-    mat_neon_blue = make_pbr_mat("Neon_Blue", (0.08, 0.65, 1.0, 1.0), metallic=0.1, roughness=0.2, emission=(0.08, 0.68, 1.0, 1.0), em_strength=9.0)
-    mat_spark = make_pbr_mat("Impact_Spark", (1.0, 0.45, 0.08, 1.0), metallic=0.0, roughness=0.1, emission=(1.0, 0.35, 0.05, 1.0), em_strength=28.0)
+    # --- 1. DỰNG THÀNH PHỐ ĐÊM 3D VỚI 4 NÓC TÒA NHÀ CAO TẦNG CÓ KHE HỞ ĐỂ NHẢY QUA ---
+    mat_roof = make_pbr_mat("Roof_Concrete", (0.045, 0.05, 0.065, 1.0), metallic=0.15, roughness=0.35)
+    mat_wall = make_pbr_mat("Building_Wall", (0.03, 0.035, 0.05, 1.0), metallic=0.35, roughness=0.45)
+    mat_ledge = make_pbr_mat("Roof_Ledge", (0.10, 0.11, 0.14, 1.0), metallic=0.4, roughness=0.35)
+    mat_neon_red = make_pbr_mat("Neon_Red", (1.0, 0.08, 0.05, 1.0), 0.1, 0.2, (1.0, 0.12, 0.05, 1.0), 14.0)
+    mat_neon_cyan = make_pbr_mat("Neon_Cyan", (0.05, 0.78, 1.0, 1.0), 0.1, 0.2, (0.06, 0.78, 1.0, 1.0), 12.0)
+    mat_neon_gold = make_pbr_mat("Neon_Gold", (1.0, 0.68, 0.10, 1.0), 0.1, 0.2, (1.0, 0.65, 0.12, 1.0), 10.0)
+    mat_win = make_pbr_mat("City_Window", (0.85, 0.90, 1.0, 1.0), 0.1, 0.1, (0.75, 0.85, 1.0, 1.0), 4.5)
 
-    bpy.ops.mesh.primitive_plane_add(size=40.0, location=(0, 0, 0))
-    bpy.context.active_object.data.materials.append(mat_floor)
+    # 4 tòa nhà chính dọc trục +Y mà 2 nhân vật chạy & nhảy qua: (y_start, y_end, roof_z)
+    rooftops = [
+        (-4.0, 14.0, 0.0),      # Tòa 1: dài 18m, cao Z=0.0m
+        (18.5, 36.0, 1.1),      # Khe hở 4.5m -> Tòa 2 cao hơn (+1.1m)
+        (41.0, 58.0, -0.4),     # Khe hở 5.0m -> Tòa 3 thấp hơn (-0.4m, cú nhảy lao xuống cực đã!)
+        (63.0, 92.0, 0.8),      # Khe hở 5.0m -> Tòa 4 cao lên (+0.8m)
+    ]
 
-    for sx in (-3.6, 3.6):
-        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx, 0, 0.02))
-        st = bpy.context.active_object
-        st.scale = (0.06, 16.0, 0.04)
-        bpy.ops.object.transform_apply(scale=True)
-        st.data.materials.append(mat_neon_red if sx < 0 else mat_neon_blue)
-
-    for idx, py in enumerate((-5.0, -2.0, 1.0, 4.0)):
-        for sx in (-4.8, 4.8):
-            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx, py, 2.4))
-            p = bpy.context.active_object
-            p.scale = (0.65, 0.65, 4.8)
-            bpy.ops.object.transform_apply(scale=True)
-            p.data.materials.append(mat_concrete)
-
-            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx - (0.35 if sx > 0 else -0.35), py, 2.2))
-            gb = bpy.context.active_object
-            gb.scale = (0.07, 0.14, 3.2)
-            bpy.ops.object.transform_apply(scale=True)
-            gb.data.materials.append(mat_neon_red if idx % 2 == 0 else mat_neon_blue)
-
-    for bx, by, bh in [(-7, 10, 8), (-3, 12, 11), (2, 11, 9), (6.5, 10, 12)]:
-        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(bx, by, bh / 2.0))
+    for idx, (y0, y1, rz) in enumerate(rooftops):
+        length = y1 - y0
+        cy = 0.5 * (y0 + y1)
+        # Thân tòa nhà cao 30m đâm sâu xuống vực thành phố
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, cy, rz - 15.0))
         b = bpy.context.active_object
-        b.scale = (2.6, 2.2, bh)
+        b.scale = (9.0, length, 30.0)
         bpy.ops.object.transform_apply(scale=True)
-        b.data.materials.append(mat_concrete)
+        b.data.materials.append(mat_roof)
 
-    # --- 2. NẠP BỘ MOTION CAPTURE ACTIONS (.FBX) & CHUẨN HÓA ĐỂ KHÔNG TRÔI VỊ TRÍ X/Y ---
+        # Dải đèn neon ở mép nhảy đầu/cuối mỗi tòa nhà (nhìn cực rõ điểm giậm nhảy & tiếp đất!)
+        for ey, nmat in [(y0 + 0.15, mat_neon_cyan), (y1 - 0.15, mat_neon_red)]:
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, ey, rz + 0.06))
+            edge = bpy.context.active_object
+            edge.scale = (8.8, 0.22, 0.12)
+            bpy.ops.object.transform_apply(scale=True)
+            edge.data.materials.append(nmat)
+
+        # Khối cục nóng điều hòa / bồn nước / biển hiệu neon 2 bên mép sân thượng (tạo cảm giác tốc độ lướt qua!)
+        for sx in (-3.6, 3.6):
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx, cy, rz + 0.8))
+            prop = bpy.context.active_object
+            prop.scale = (1.3, 2.4, 1.6)
+            bpy.ops.object.transform_apply(scale=True)
+            prop.data.materials.append(mat_ledge)
+
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(sx, y1 - 2.2, rz + 2.4))
+            sign = bpy.context.active_object
+            sign.scale = (0.18, 2.2, 1.4)
+            bpy.ops.object.transform_apply(scale=True)
+            sign.data.materials.append(mat_neon_red if (idx % 2 == 0) else mat_neon_gold)
+
+    # Thành phố cao ốc 2 bên (trái X=-14..-28, phải X=+14..+28) có cửa sổ sáng rực tạo chiều sâu choáng ngợp
+    rng = random.Random(2026)
+    for by in range(-10, 115, 11):
+        for side in (-1, 1):
+            bx = side * rng.uniform(14.0, 26.0)
+            bh = rng.uniform(28.0, 52.0)
+            bw = rng.uniform(6.0, 10.0)
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=(bx, by, bh / 2.0 - 22.0))
+            tower = bpy.context.active_object
+            tower.scale = (bw, bw, bh)
+            bpy.ops.object.transform_apply(scale=True)
+            tower.data.materials.append(mat_wall)
+
+            # Dải đèn cửa sổ ngang phát sáng trên mỗi cao ốc
+            for wz in (-6.0, 0.0, 6.0, 12.0):
+                bpy.ops.mesh.primitive_cube_add(size=1.0, location=(bx - side * (bw * 0.51), by, wz))
+                win = bpy.context.active_object
+                win.scale = (0.12, bw * 0.72, 0.55)
+                bpy.ops.object.transform_apply(scale=True)
+                win.data.materials.append(mat_win if rng.random() > 0.35 else mat_neon_cyan)
+
+    # --- 2. NẠP 3 ĐỘNG TÁC PARKOUR THẬT (RUN / JUMP / ROLL) & CHUẨN HÓA TÊN XƯƠNG 100% ---
     mocap_actions = {}
     for clip_key, fbx_path in manifest["anims"].items():
         before_objs = set(bpy.context.scene.objects)
         before_acts = set(bpy.data.actions)
-        try:
-            bpy.ops.import_scene.fbx(filepath=fbx_path, ignore_leaf_bones=True)
-        except Exception as e:
-            print(f"⚠️ Không nạp được anim {clip_key}: {e}", flush=True)
-            continue
+        bpy.ops.import_scene.fbx(filepath=fbx_path, ignore_leaf_bones=True)
         new_objs = [o for o in bpy.context.scene.objects if o not in before_objs]
         new_acts = [a for a in bpy.data.actions if a not in before_acts]
-
-        # Xóa bộ xương tạm của file anim, chỉ giữ lại Action Motion Capture!
         for o in new_objs:
             bpy.data.objects.remove(o, do_unlink=True)
-
         if not new_acts:
             continue
+
         act = new_acts[0]
-        act.name = f"Mocap_{clip_key}"
+        act.name = f"Parkour_{clip_key}"
         act.use_fake_user = True
 
-        # Xóa toàn bộ fcurve scale (tránh FBX anim tự phóng to/thu nhỏ nhân vật thành người khổng lồ!)
+        # Chuẩn hóa tên xương trong mọi fcurve về đúng "mixamorig:<Bone>" + xóa scale + khóa trượt ngang in-place!
         for fc in list(act.fcurves):
             if fc.data_path.endswith("scale"):
                 act.fcurves.remove(fc)
-
-        # Khóa trượt ngang (X, Z) của xương Hips tại frame đầu để nhân vật KHÔNG trôi ra khỏi sân đấu,
-        # nhưng GIỮ NGUYÊN 100% độ cao Y & mọi chuyển động chân/eo/tay/đầu để chân bám chặt mặt đất!
-        for fc in act.fcurves:
+                continue
+            m = re.match(r'^pose\.bones\["([^"]+)"\](.*)$', fc.data_path)
+            if m:
+                fc.data_path = f'pose.bones["{_norm_mixamo_bone(m.group(1))}"]{m.group(2)}'
+            # Giữ chuyển động tại chỗ (in-place) theo X/Z để quỹ đạo chạy & nhảy qua tòa nhà do root_empty điều khiển chính xác!
             if "hips" in fc.data_path.lower() and fc.data_path.endswith("location") and fc.array_index in (0, 2):
                 if fc.keyframe_points:
                     base_v = fc.keyframe_points[0].co.y
                     for kp in fc.keyframe_points:
-                        kp.co.y = base_v + (kp.co.y - base_v) * 0.25
-                        kp.handle_left.y = base_v + (kp.handle_left.y - base_v) * 0.25
-                        kp.handle_right.y = base_v + (kp.handle_right.y - base_v) * 0.25
+                        kp.co.y = base_v
+                        kp.handle_left.y = base_v
+                        kp.handle_right.y = base_v
 
         f_len = max(12, int(round(act.frame_range[1] - act.frame_range[0])))
         mocap_actions[clip_key] = (act, f_len)
-        print(f"Loaded REAL Mocap Action: {act.name} ({f_len} frames)", flush=True)
+        print(f"Loaded Parkour Mocap: {act.name} ({f_len} frames)", flush=True)
 
-    if not mocap_actions:
-        raise RuntimeError("Không nạp được Action Motion Capture nào từ Mixamo FBX!")
-
-    # --- 3. NẠP 2 NHÂN VẬT NGƯỜI THẬT MIXAMO (.FBX) ---
-    def load_mixamo_character(name, fbx_path):
+    # --- 3. NẠP 2 NHÂN VẬT NGƯỜI THẬT MIXAMO & CHUẨN HÓA XƯƠNG + CHIỀU CAO 1.78M ---
+    def load_runner(name, fbx_path):
         before_objs = set(bpy.context.scene.objects)
         bpy.ops.import_scene.fbx(filepath=fbx_path, ignore_leaf_bones=True)
         new_objs = [o for o in bpy.context.scene.objects if o not in before_objs]
@@ -264,7 +285,10 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
         if arm.animation_data:
             arm.animation_data.action = None
 
-        # Chuẩn hóa chiều cao ĐÚNG 1.78m đứng trên Z=0 bằng root_empty (không phá tỷ lệ xương bên trong!)
+        # Chuẩn hóa TẤT CẢ tên xương (kể cả mixamorig1:, mixamorig9:, hay không tiền tố) -> mixamorig:<Bone>
+        for b in arm.data.bones:
+            b.name = _norm_mixamo_bone(b.name)
+
         bpy.context.view_layer.update()
         pts = []
         for m in meshes:
@@ -280,8 +304,8 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
             r.parent = root_empty
             r.location.z -= min_z
         root_empty.scale = (sc, sc, sc)
-        bpy.context.view_layer.update()
-        print(f"[{name}] Normalized height: {raw_h:.2f}m -> 1.78m (scale={sc:.4f})", flush=True)
+        # Mixamo FBX mặc định mặt nhìn về -Y -> xoay 180 độ để chạy thẳng dọc trục +Y qua 4 tòa nhà!
+        root_empty.rotation_euler = (0.0, 0.0, math.radians(180.0))
 
         for m in meshes:
             bpy.context.view_layer.objects.active = m
@@ -289,186 +313,192 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
             m.select_set(True)
             bpy.ops.object.shade_smooth()
 
-        # Đảm bảo tên xương trùng khớp với Action (nhiều bản Mixamo có/không có tiền tố mixamorig:)
-        arm_bone_names = {b.name for b in arm.data.bones}
-        sample_act = next(iter(mocap_actions.values()))[0]
-        act_has_prefix = any("mixamorig:" in fc.data_path for fc in sample_act.fcurves)
-        arm_has_prefix = any("mixamorig:" in bn for bn in arm_bone_names)
-        if act_has_prefix and not arm_has_prefix:
-            for b in arm.data.bones:
-                if not b.name.startswith("mixamorig:"):
-                    b.name = "mixamorig:" + b.name
-        elif not act_has_prefix and arm_has_prefix:
-            for b in arm.data.bones:
-                if b.name.startswith("mixamorig:"):
-                    b.name = b.name.replace("mixamorig:", "", 1)
-
         if not arm.animation_data:
             arm.animation_data_create()
-        print(f"[{name}] Loaded real human Mixamo character: {len(arm.data.bones)} bones, {len(meshes)} meshes", flush=True)
+        print(f"[{name}] Ready! height={raw_h:.2f}m->1.78m, bones={len(arm.data.bones)} (all normalized to mixamorig:*)", flush=True)
         return root_empty, arm
 
-    hero_root, hero_arm = load_mixamo_character("HoaDo", manifest["hero_fbx"])
-    enemy_root, enemy_arm = load_mixamo_character("MacKhieu", manifest["enemy_fbx"])
+    hero_root, hero_arm = load_runner("HoaDo", manifest["hero_fbx"])
+    enemy_root, enemy_arm = load_runner("MacKhieu", manifest["enemy_fbx"])
 
-    # Đặt 2 nhân vật đối mặt nhau trên trục Y (Mixamo FBX mặc định mặt nhìn về -Y)
-    # Hero đứng ở Y=-0.75 quay mặt về +Y (rot Z = 180°); Enemy đứng ở Y=+0.75 quay mặt về -Y (rot Z = 0°)
-    hero_root.location = (0.0, -0.78, 0.0)
-    hero_root.rotation_euler = (0.0, 0.0, math.radians(180.0))
-    enemy_root.location = (0.0, 0.78, 0.0)
-    enemy_root.rotation_euler = (0.0, 0.0, 0.0)
+    # --- 4. TÍNH QUỸ ĐẠO CHẠY + NHẢY PARABOL QUA 3 KHE TÒA NHÀ & ĐỒNG BỘ NLA (RUN -> JUMP -> ROLL -> RUN) ---
+    def roof_z_and_state(y):
+        """Trả về (z_height, state) theo vị trí dọc trục Y: state in ('run', 'jump', 'roll')."""
+        for i, (y0, y1, rz) in enumerate(rooftops):
+            if y0 <= y <= y1:
+                # 1.8m ngay sau khi tiếp đất từ khe nhảy trước -> lộn nhào parkour (roll)!
+                if i > 0 and (y - y0) < 2.2:
+                    return rz, "roll"
+                return rz, "run"
+            # Đang bay qua khe hở giữa tòa i và tòa i+1!
+            if i < len(rooftops) - 1:
+                ny0, _, nrz = rooftops[i + 1]
+                if y1 < y < ny0:
+                    t = (y - y1) / (ny0 - y1)  # 0..1
+                    # Đường parabol nhảy cao vọt thêm 1.65m giữa không trung!
+                    z_base = rz * (1.0 - t) + nrz * t
+                    z_arc = 4.0 * 1.65 * t * (1.0 - t)
+                    return z_base + z_arc, "jump"
+        return rooftops[-1][2], "run"
 
-    # --- 4. GHÉP CHUỖI MOTION CAPTURE VÕ THUẬT THẬT BẰNG BLENDER NLA (2 TRACK XEN KẼ ĐỂ CROSSFADE MƯỢT!) ---
-    def schedule_nla(arm, sequence):
-        """Xen kẽ 2 NLA track (A/B) để chuyển cảnh mượt 6 frame giữa các đòn võ thật mà không bao giờ trùng track."""
+    def animate_parkour_runner(root_obj, arm, x_lane, y_start, speed_mps):
+        """Di chuyển nhân vật dọc +Y với vận tốc thật (~2.8 m/s -> 84m trong 30s) & đồng bộ động tác Run/Jump/Roll."""
+        jump_frames = []
+        state_timeline = []
+        for fr in range(1, TOTAL_FRAMES + 1):
+            t_sec = (fr - 1) / float(FPS)
+            y = y_start + speed_mps * t_sec
+            z, st = roof_z_and_state(y)
+            # Lắc nhẹ ngang tạo cảm giác chạy rượt đuổi tự nhiên
+            x = x_lane + 0.15 * math.sin(t_sec * 1.1)
+            root_obj.location = (x, y, z)
+            root_obj.keyframe_insert(data_path="location", frame=fr)
+            state_timeline.append((fr, st))
+
+        # Chuyển đổi state_timeline thành các đoạn (start_fr, end_fr, clip_key) để đặt NLA track A/B mượt mà!
+        segments = []
+        cur_st = state_timeline[0][1]
+        seg_start = 1
+        for fr, st in state_timeline[1:]:
+            if st != cur_st:
+                segments.append((seg_start, fr - 1, cur_st))
+                if cur_st == "jump":
+                    jump_frames.append((seg_start, fr - 1))
+                cur_st = st
+                seg_start = fr
+        segments.append((seg_start, TOTAL_FRAMES, cur_st))
+
         track_a = arm.animation_data.nla_tracks.new()
-        track_a.name = "Mocap_Track_A"
+        track_a.name = "Parkour_A"
         track_b = arm.animation_data.nla_tracks.new()
-        track_b.name = "Mocap_Track_B"
+        track_b.name = "Parkour_B"
         tracks = [track_a, track_b]
-        cur_frame = 1
-        impact_frames = []
 
-        for idx_s, (clip_key, is_attack) in enumerate(sequence):
-            if clip_key not in mocap_actions:
-                clip_key = next(iter(mocap_actions.keys()))
+        for idx_s, (f0, f1, st) in enumerate(segments):
+            clip_key = st if st in mocap_actions else "run"
             act, f_len = mocap_actions[clip_key]
-            if cur_frame > TOTAL_FRAMES:
-                break
             tr = tracks[idx_s % 2]
-            # Đảm bảo không chạm strip trước đó trên cùng track
+            start_f = f0
             if tr.strips:
-                cur_frame = max(cur_frame, int(math.ceil(tr.strips[-1].frame_end)) + 1)
-            strip = tr.strips.new(f"{clip_key}_{cur_frame}", start=cur_frame, action=act)
+                start_f = max(start_f, int(math.ceil(tr.strips[-1].frame_end)) + 1)
+            if start_f > TOTAL_FRAMES:
+                break
+            strip = tr.strips.new(f"{clip_key}_{start_f}", start=start_f, action=act)
             strip.blend_type = "REPLACE"
-            strip.extrapolation = "NOTHING" if idx_s < len(sequence) - 1 else "HOLD_FORWARD"
-            strip.blend_in = min(6, max(1, f_len // 5))
+            strip.extrapolation = "NOTHING" if idx_s < len(segments) - 1 else "HOLD_FORWARD"
+            dur = max(6, f1 - start_f + 4)
+            if clip_key == "run":
+                strip.repeat = max(1.0, dur / max(1.0, float(f_len)))
+            else:
+                # Co giãn nhẹ tốc độ clip jump/roll vừa khít đúng thời gian bay qua khe tòa nhà!
+                strip.scale = max(0.45, min(1.8, dur / max(1.0, float(f_len))))
+            strip.blend_in = min(5, max(1, dur // 5))
             strip.blend_out = 0
-            if is_attack:
-                impact_frames.append(cur_frame + int(f_len * 0.45))
-            cur_frame += max(18, f_len - 5)
+        return jump_frames
 
-        # Lấp nốt tới frame 1440 bằng clip cuối cùng trên track còn trống
-        if cur_frame <= TOTAL_FRAMES:
-            last_key = sequence[-1][0] if sequence[-1][0] in mocap_actions else next(iter(mocap_actions.keys()))
-            act, f_len = mocap_actions[last_key]
-            tr = tracks[len(sequence) % 2]
-            if tr.strips:
-                cur_frame = max(cur_frame, int(math.ceil(tr.strips[-1].frame_end)) + 1)
-            if cur_frame <= TOTAL_FRAMES:
-                strip = tr.strips.new(f"hold_{cur_frame}", start=cur_frame, action=act)
-                strip.extrapolation = "HOLD_FORWARD"
-                strip.repeat = max(1.0, (TOTAL_FRAMES - cur_frame + 10) / max(1, f_len))
-                strip.blend_in = 6
-        return impact_frames
+    # Mạc Khiêu chạy trước 3.8m (y_start = 2.0m), Hỏa Đỏ chạy đuổi theo sát phía sau (y_start = -1.8m), vận tốc 2.75 m/s!
+    enemy_jumps = animate_parkour_runner(enemy_root, enemy_arm, x_lane=0.45, y_start=2.0, speed_mps=2.72)
+    hero_jumps = animate_parkour_runner(hero_root, hero_arm, x_lane=-0.35, y_start=-1.8, speed_mps=2.82)
 
-    # Biên đạo đối kháng ăn khớp giữa Hỏa Đỏ (tấn công/phản công) và Mạc Khiêu (đỡ/trúng đòn/phản công/gục ngã)
-    hero_seq = [
-        ("idle", False), ("idle", False),
-        ("jab", True), ("cross", True), ("idle", False),
-        ("block", False), ("block", False), ("uppercut", True),
-        ("kick_front", True), ("idle", False), ("kick_spin", True),
-        ("jab", True), ("cross", True), ("block", False),
-        ("hit", False), ("block", False), ("uppercut", True),
-        ("jab", True), ("cross", True), ("kick_front", True),
-        ("kick_spin", True), ("cross", True), ("idle", False),
-    ]
-    enemy_seq = [
-        ("idle", False), ("idle", False),
-        ("block", False), ("hit", False), ("idle", False),
-        ("jab", True), ("cross", True), ("hit", False),
-        ("hit", False), ("idle", False), ("hit", False),
-        ("block", False), ("hit", False), ("kick_front", True),
-        ("cross", True), ("kick_spin", True), ("hit", False),
-        ("hit", False), ("hit", False), ("hit", False),
-        ("hit", False), ("knockdown", False), ("knockdown", False),
-    ]
+    with open(out_raw_mp4 + ".jumps.json", "w", encoding="utf-8") as jf:
+        json.dump({"hero_jumps": hero_jumps, "enemy_jumps": enemy_jumps}, jf)
 
-    hero_hits = schedule_nla(hero_arm, hero_seq)
-    enemy_hits = schedule_nla(enemy_arm, enemy_seq)
-    all_impact_frames = sorted(set(f for f in (hero_hits + enemy_hits) if 10 < f < TOTAL_FRAMES - 10))
-
-    # Lưu danh sách frame trúng đòn để tạo tiếng đấm/đá SFX khớp 100%!
-    with open(out_raw_mp4 + ".hits.json", "w", encoding="utf-8") as hf:
-        json.dump(all_impact_frames, hf)
-
-    # Vòng sóng sáng va chạm (Impact Ring) bung nổ đúng frame trúng đòn
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.32, minor_radius=0.025, location=(0, 0, 1.32))
-    spark_ring = bpy.context.active_object
-    spark_ring.rotation_euler = (math.radians(90), 0, 0)
-    spark_ring.data.materials.append(mat_spark)
-    spark_ring.scale = (0.001, 0.001, 0.001)
-    spark_ring.keyframe_insert(data_path="scale", frame=1)
-    for fr in all_impact_frames:
-        spark_ring.scale = (0.001, 0.001, 0.001)
-        spark_ring.keyframe_insert(data_path="scale", frame=fr - 1)
-        spark_ring.scale = (1.5, 1.5, 1.5)
-        spark_ring.keyframe_insert(data_path="scale", frame=fr + 2)
-        spark_ring.scale = (0.001, 0.001, 0.001)
-        spark_ring.keyframe_insert(data_path="scale", frame=fr + 6)
-
-    # --- 5. ÁNH SÁNG ĐIỆN ẢNH 3 ĐIỂM + RIM LIGHT ---
+    # --- 5. ÁNH SÁNG THÀNH PHỐ ĐÊM ĐIỆN ẢNH ---
     if scene.world is None:
         scene.world = bpy.data.worlds.new("World")
     scene.world.use_nodes = True
     bg = scene.world.node_tree.nodes.get("Background")
     if bg:
-        bg.inputs[0].default_value = (0.02, 0.025, 0.04, 1.0)
-        bg.inputs[1].default_value = 0.8
+        bg.inputs[0].default_value = (0.015, 0.022, 0.045, 1.0)
+        bg.inputs[1].default_value = 0.85
 
-    def add_light(name, loc, rot_deg, energy, color, size=2.5):
-        bpy.ops.object.light_add(type="AREA", location=loc, rotation=tuple(math.radians(a) for a in rot_deg))
+    # Đèn mặt trăng / ánh sáng đêm bao trùm toàn bộ 4 tòa nhà + 2 đèn bám theo 2 nhân vật để mặt & đồ luôn sáng rõ!
+    bpy.ops.object.light_add(type="SUN", location=(10, 20, 40), rotation=(math.radians(48), math.radians(18), math.radians(-30)))
+    sun = bpy.context.active_object
+    sun.data.energy = 2.2
+    sun.data.color = (0.78, 0.86, 1.0)
+
+    def add_follow_light(name, parent, offset, energy, color):
+        bpy.ops.object.light_add(type="POINT", location=(0, 0, 0))
         l = bpy.context.active_object
         l.name = name
+        l.parent = parent
+        l.location = offset
         l.data.energy = energy
         l.data.color = color
-        l.data.size = size
+        l.data.shadow_soft_size = 1.2
 
-    add_light("Key_Main", (3.4, -2.4, 3.6), (55, 0, 52), 340.0, (1.0, 0.94, 0.88), 3.0)
-    add_light("Fill_Cool", (-3.4, 1.6, 2.8), (64, 0, -115), 190.0, (0.76, 0.86, 1.0), 3.2)
-    add_light("Rim_Red", (-2.2, -4.4, 2.5), (68, 0, -25), 400.0, (1.0, 0.22, 0.10), 2.2)
-    add_light("Rim_Blue", (2.2, 4.4, 2.5), (-68, 0, 25), 360.0, (0.12, 0.72, 1.0), 2.2)
+    add_follow_light("Hero_KeyLight", hero_root, (-1.8, 1.6, 2.4), 260.0, (1.0, 0.85, 0.72))
+    add_follow_light("Hero_RimRed", hero_root, (1.4, -1.8, 2.0), 220.0, (1.0, 0.20, 0.08))
+    add_follow_light("Enemy_KeyLight", enemy_root, (1.8, 1.6, 2.4), 240.0, (0.75, 0.90, 1.0))
 
-    # --- 6. 8 GÓC MÁY HÀNH ĐỘNG ĐIỆN ẢNH CẮT CẢNH LIÊN TỤC TRONG 60 GIÂY ---
-    mid_tgt = bpy.data.objects.new("FightCenter", None)
-    scene.collection.objects.link(mid_tgt)
-    mid_tgt.location = (0.0, 0.0, 1.15)
+    # --- 6. HỆ THỐNG 6 GÓC MÁY RƯỢT ĐUỔI ĐIỆN ẢNH (DRONE BÁM NGANG + NHẢY QUA ĐẦU + CHASE CAM) ---
+    chase_mid = bpy.data.objects.new("ChaseMidTarget", None)
+    scene.collection.objects.link(chase_mid)
+    for fr in range(1, TOTAL_FRAMES + 1, 6):
+        scene.frame_set(fr)
+        hl = hero_root.location
+        el = enemy_root.location
+        chase_mid.location = (0.5 * (hl.x + el.x), 0.5 * (hl.y + el.y), 0.5 * (hl.z + el.z) + 1.15)
+        chase_mid.keyframe_insert(data_path="location", frame=fr)
 
-    hero_face_tgt = bpy.data.objects.new("HeroFaceTarget", None)
-    scene.collection.objects.link(hero_face_tgt)
-    hero_face_tgt.location = (0.0, -0.75, 1.48)
+    hero_tgt = bpy.data.objects.new("HeroTarget", None)
+    scene.collection.objects.link(hero_tgt)
+    hero_tgt.parent = hero_root
+    hero_tgt.location = (0.0, 0.0, 1.35)
 
-    def make_cam(name, p1, p2, f1, f2, tgt, lens=38.0):
-        bpy.ops.object.camera_add(location=p1)
+    def make_follow_cam(name, parent_obj, offset_start, offset_end, f1, f2, target_obj, lens=32.0):
+        bpy.ops.object.camera_add(location=(0, 0, 0))
         c = bpy.context.active_object
         c.name = name
         c.data.lens = lens
-        c.location = p1
+        c.parent = parent_obj
+        c.location = offset_start
         c.keyframe_insert(data_path="location", frame=f1)
-        c.location = p2
+        c.location = offset_end
         c.keyframe_insert(data_path="location", frame=f2)
         con = c.constraints.new(type="TRACK_TO")
-        con.target = tgt
+        con.target = target_obj
         con.track_axis = "TRACK_NEGATIVE_Z"
         con.up_axis = "UP_Y"
         return c
 
+    def make_static_gap_cam(name, loc_start, loc_end, f1, f2, target_obj, lens=28.0):
+        bpy.ops.object.camera_add(location=loc_start)
+        c = bpy.context.active_object
+        c.name = name
+        c.data.lens = lens
+        c.location = loc_start
+        c.keyframe_insert(data_path="location", frame=f1)
+        c.location = loc_end
+        c.keyframe_insert(data_path="location", frame=f2)
+        con = c.constraints.new(type="TRACK_TO")
+        con.target = target_obj
+        con.track_axis = "TRACK_NEGATIVE_Z"
+        con.up_axis = "UP_Y"
+        return c
+
+    # 6 góc máy bám nhịp 3 cú nhảy qua khe tòa nhà:
     cam_schedule = [
-        (1, make_cam("C1_WideIntro", (3.5, -1.2, 1.35), (3.0, 0.4, 1.42), 1, 160, mid_tgt, 35.0)),
-        (161, make_cam("C2_HeroClose", (1.1, 0.55, 1.45), (0.85, 0.15, 1.50), 161, 260, hero_face_tgt, 50.0)),
-        (261, make_cam("C3_SideActionR", (2.9, -0.2, 1.25), (2.6, 0.5, 1.32), 261, 460, mid_tgt, 38.0)),
-        (461, make_cam("C4_LowKickL", (-2.7, -0.5, 0.72), (-2.5, 0.8, 0.98), 461, 680, mid_tgt, 36.0)),
-        (681, make_cam("C5_OverShoulder", (-1.5, -2.4, 1.52), (-1.1, -1.8, 1.45), 681, 880, mid_tgt, 40.0)),
-        (881, make_cam("C6_CounterR", (2.8, -0.9, 1.15), (2.5, -0.1, 1.32), 881, 1100, mid_tgt, 36.0)),
-        (1101, make_cam("C7_FinisherSweep", (-2.4, 0.8, 0.85), (2.2, 1.0, 1.18), 1101, 1320, mid_tgt, 38.0)),
-        (1321, make_cam("C8_VictoryHero", (1.5, 0.9, 1.05), (-1.2, 0.8, 1.42), 1321, 1440, hero_face_tgt, 45.0)),
+        # Shot 1 (0–5s): Góc rượt đuổi sau vai Hỏa Đỏ đang tăng tốc đuổi Mạc Khiêu trên Tòa 1
+        (1, make_follow_cam("C1_ChaseBehind", hero_root, (-1.8, -3.2, 2.0), (-1.2, -2.5, 1.7), 1, 120, chase_mid, 30.0)),
+        # Shot 2 (5–10s): Góc thấp ngay dưới khe hở Tòa 1->2 (2 người phóng vọt qua ngay trên đầu camera!)
+        (121, make_static_gap_cam("C2_Gap1_LowLeap", (5.5, 16.2, -0.4), (4.5, 17.0, 1.4), 121, 240, chase_mid, 28.0)),
+        # Shot 3 (10–15s): Drone bay song song bên trái trên Tòa 2 khoe cả thành phố đêm & 2 người tăng tốc
+        (241, make_follow_cam("C3_DroneSideL", chase_mid, (-6.2, 1.0, 1.6), (-5.5, 2.5, 2.2), 241, 360, chase_mid, 32.0)),
+        # Shot 4 (15–20s): Khe hở Tòa 2->3 (cú nhảy lao từ cao xuống thấp cực kịch tính!)
+        (361, make_static_gap_cam("C4_Gap2_DropLeap", (-6.0, 38.5, 0.2), (-4.5, 40.5, 1.8), 361, 480, chase_mid, 26.0)),
+        # Shot 5 (20–25s): Góc quay ngược từ phía trước (nhìn thẳng mặt Hỏa Đỏ đang đuổi sát nút trên Tòa 3!)
+        (481, make_follow_cam("C5_FrontChase", hero_root, (1.6, 3.8, 1.4), (-1.2, 3.0, 1.5), 481, 600, hero_tgt, 38.0)),
+        # Shot 6 (25–30s): Khe hở cuối Tòa 3->4 (góc rộng điện ảnh cả 2 phóng vọt qua ánh đèn thành phố!)
+        (601, make_static_gap_cam("C6_Gap3_EpicWide", (7.2, 60.5, 1.8), (6.0, 64.0, 3.2), 601, 720, chase_mid, 28.0)),
     ]
     scene.camera = cam_schedule[0][1]
     for fstart, cam_obj in cam_schedule:
         mk = scene.timeline_markers.new(cam_obj.name, frame=fstart)
         mk.camera = cam_obj
 
-    # --- 7. RENDER CYCLES GPU SIÊU TỐC (OPTIX RAYTRACING, KHÔNG CPU DENOISE -> ~0.5s/frame) ---
+    # --- 7. RENDER CYCLES GPU SIÊU TỐC (720 FRAMES @ 720p, 24FPS ĐÚNG 30 GIÂY) ---
     scene.render.engine = "CYCLES"
     scene.render.use_persistent_data = True
     scene.cycles.max_bounces = 3
@@ -499,13 +529,12 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     scene.cycles.samples = 12
     scene.cycles.use_adaptive_sampling = True
     scene.cycles.adaptive_threshold = 0.08
-    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Adaptive 12 samples | Denoise=OFF", flush=True)
+    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | 720 frames @ 24fps (30s)", flush=True)
 
-    # Ép lại FPS = 24 SAU KHI import FBX (vì import_scene.fbx hay tự đổi FPS sang 30 -> 1440/30 = 48s!)
+    # Ép lại FPS = 24 SAU KHI import FBX
     scene.render.fps = FPS
     scene.frame_start = 1
     scene.frame_end = TOTAL_FRAMES
-
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
     scene.render.image_settings.file_format = "FFMPEG"
@@ -514,28 +543,39 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     scene.render.ffmpeg.constant_rate_factor = "MEDIUM"
     scene.render.filepath = out_raw_mp4
     os.makedirs(os.path.dirname(out_raw_mp4), exist_ok=True)
-    print(f"Đang render 1 phút võ thuật Motion Capture thật ({TOTAL_FRAMES} frames @ 1280x720)...", flush=True)
     bpy.ops.render.render(animation=True)
-    print("-> Render Blender hoàn tất:", out_raw_mp4, flush=True)
+    print("-> Render Blender Parkour hoàn tất:", out_raw_mp4, flush=True)
 
 
-def generate_impact_sfx_track(out_wav, hit_frames, duration_sec=60.0):
+def generate_parkour_sfx(out_wav, jump_info, duration_sec=30.0):
+    """Tạo tiếng gió vút (whoosh) lúc nhảy qua tòa nhà & tiếng tiếp đất (thud) khớp từng cú nhảy."""
     sr = 44100
     n_samples = int(sr * duration_sec)
     buf = [0.0] * n_samples
     rng = random.Random(2026)
-    for fr in hit_frames:
-        start = int((fr / 24.0) * sr)
-        hit_len = int(0.18 * sr)
-        for i in range(hit_len):
-            idx = start + i
+
+    all_jumps = jump_info.get("hero_jumps", []) + jump_info.get("enemy_jumps", [])
+    for f0, f1 in all_jumps:
+        # Tiếng gió vút lúc giậm nhảy
+        s0 = int((f0 / 24.0) * sr)
+        wlen = int(0.35 * sr)
+        for i in range(wlen):
+            idx = s0 + i
             if idx >= n_samples:
                 break
             t = i / sr
-            env = math.exp(-t * 28.0)
-            thump = math.sin(2.0 * math.pi * (140.0 * math.exp(-t * 14.0)) * t)
-            crack = (rng.random() * 2.0 - 1.0) * math.exp(-t * 45.0)
-            buf[idx] = max(-0.95, min(0.95, buf[idx] + (0.75 * thump + 0.45 * crack) * env))
+            env = math.sin(math.pi * (i / wlen)) * 0.45
+            buf[idx] = max(-0.95, min(0.95, buf[idx] + (rng.random() * 2 - 1) * env))
+        # Tiếng tiếp đất mạnh
+        s1 = int((f1 / 24.0) * sr)
+        tlen = int(0.20 * sr)
+        for i in range(tlen):
+            idx = s1 + i
+            if idx >= n_samples:
+                break
+            t = i / sr
+            thump = math.sin(2 * math.pi * (95.0 * math.exp(-t * 16.0)) * t) * math.exp(-t * 22.0) * 0.8
+            buf[idx] = max(-0.95, min(0.95, buf[idx] + thump))
 
     with wave.open(out_wav, "wb") as wf:
         wf.setnchannels(1)
@@ -544,31 +584,28 @@ def generate_impact_sfx_track(out_wav, hit_frames, duration_sec=60.0):
         wf.writeframes(b"".join(struct.pack("<h", int(s * 32000)) for s in buf))
 
 
-def synth_dialogue_lines(tmp_dir):
+def synth_chase_dialogue(tmp_dir):
     lines = [
-        (2.0, "vi-VN-NamMinhNeural", "+4%", "-2Hz", "Mạc Khiêu! Đứng lại! Hôm nay ta sẽ không để ngươi thoát đâu!"),
-        (6.8, "vi-VN-NamMinhNeural", "-6%", "-12Hz", "Chưa biến thân mà dám cản đường ta sao? Nực cười!"),
-        (22.5, "vi-VN-NamMinhNeural", "+8%", "-2Hz", "Đừng coi thường võ thuật Nguyên Giới! Xem chiêu này!"),
-        (34.5, "vi-VN-NamMinhNeural", "-4%", "-12Hz", "Khá lắm... nhưng tốc độ của ngươi vẫn còn chậm!"),
-        (46.0, "vi-VN-NamMinhNeural", "+10%", "0Hz", "Kết thúc rồi! Hỏa Quyền Liên Hoàn!"),
-        (55.5, "vi-VN-NamMinhNeural", "+2%", "-2Hz", "Trận chiến này kết thúc tại đây."),
+        (1.2, "vi-VN-NamMinhNeural", "+8%", "Mạc Khiêu! Đứng lại ngay!"),
+        (6.2, "vi-VN-NamMinhNeural", "+2%", "Đuổi kịp ta qua dãy cao ốc này đi rồi nói!"),
+        (14.5, "vi-VN-NamMinhNeural", "+10%", "Đừng hòng chạy thoát!"),
+        (23.5, "vi-VN-NamMinhNeural", "+10%", "Ta bắt kịp ngươi rồi!"),
     ]
     out_items = []
     try:
         import edge_tts
 
         async def _gen():
-            for i, (t_sec, voice, rate, pitch, text) in enumerate(lines):
-                mp3 = os.path.join(tmp_dir, f"line_{i:02d}.mp3")
+            for i, (t_sec, voice, rate, text) in enumerate(lines):
+                mp3 = os.path.join(tmp_dir, f"chase_line_{i:02d}.mp3")
                 try:
-                    comm = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
+                    comm = edge_tts.Communicate(text, voice=voice, rate=rate)
                     await comm.save(mp3)
                 except Exception:
                     try:
                         comm = edge_tts.Communicate(text, voice=voice)
                         await comm.save(mp3)
-                    except Exception as e2:
-                        print(f"  Bỏ qua câu {i}: {e2}", flush=True)
+                    except Exception:
                         continue
                 out_items.append((t_sec, mp3))
 
@@ -591,13 +628,13 @@ def mux_full_audio(raw_mp4, sfx_wav, dialogue_items, final_mp4):
     bgm = next((p for p in bgm_candidates if os.path.exists(p)), None)
 
     cmd = [ffmpeg, "-y", "-i", raw_mp4, "-i", sfx_wav]
-    filters = ["[1:a]volume=0.85[sfx]"]
+    filters = ["[1:a]volume=0.90[sfx]"]
     mix_labels = ["[sfx]"]
     idx = 2
 
     if bgm:
         cmd += ["-stream_loop", "-1", "-i", bgm]
-        filters.append(f"[{idx}:a]volume=0.22[bgm]")
+        filters.append(f"[{idx}:a]volume=0.25[bgm]")
         mix_labels.append("[bgm]")
         idx += 1
 
@@ -611,13 +648,13 @@ def mux_full_audio(raw_mp4, sfx_wav, dialogue_items, final_mp4):
     filters.append(f"{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:normalize=0[aout]")
     cmd += ["-filter_complex", ";".join(filters), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-shortest", final_mp4]
     subprocess.run(cmd, check=True)
-    print("-> Đã ghép xong toàn bộ âm thanh võ thuật 1 phút:", final_mp4, flush=True)
+    print("-> Đã ghép xong âm thanh rượt đuổi Parkour 30s:", final_mp4, flush=True)
 
 
 def main():
     if "--blender-render" in sys.argv:
         idx = sys.argv.index("--blender-render")
-        run_blender_mocap_fight(sys.argv[idx + 1], sys.argv[idx + 2])
+        run_blender_rooftop_chase(sys.argv[idx + 1], sys.argv[idx + 2])
         return
 
     work_dir = "/content/Test/assets/models_3d"
@@ -625,10 +662,10 @@ def main():
     os.makedirs(work_dir, exist_ok=True)
     os.makedirs(out_dir, exist_ok=True)
 
-    manifest = download_mixamo_assets(work_dir)
-    manifest_path = os.path.join(work_dir, "mixamo_manifest.json")
-    raw_mp4 = os.path.join(out_dir, "demo_mocap_1min_raw.mp4")
-    sfx_wav = os.path.join(out_dir, "demo_mocap_sfx.wav")
+    manifest = download_parkour_assets(work_dir)
+    manifest_path = os.path.join(work_dir, "parkour_manifest.json")
+    raw_mp4 = os.path.join(out_dir, "demo_parkour_chase_raw.mp4")
+    sfx_wav = os.path.join(out_dir, "demo_parkour_sfx.wav")
     final_mp4 = os.path.join(out_dir, "demo_sentai_3d_scene.mp4")
 
     cmd = [
@@ -638,12 +675,12 @@ def main():
     ]
     subprocess.run(cmd, check=True)
 
-    hits_json = raw_mp4 + ".hits.json"
-    hit_frames = json.load(open(hits_json, "r", encoding="utf-8")) if os.path.exists(hits_json) else []
-    generate_impact_sfx_track(sfx_wav, hit_frames, duration_sec=60.0)
-    dialogue_items = synth_dialogue_lines(out_dir)
+    jumps_json = raw_mp4 + ".jumps.json"
+    jump_info = json.load(open(jumps_json, "r", encoding="utf-8")) if os.path.exists(jumps_json) else {}
+    generate_parkour_sfx(sfx_wav, jump_info, duration_sec=30.0)
+    dialogue_items = synth_chase_dialogue(out_dir)
     mux_full_audio(raw_mp4, sfx_wav, dialogue_items, final_mp4)
-    print(f"HOÀN TẤT VIDEO VÕ THUẬT MOCAP THẬT 1 PHÚT: {final_mp4} ({os.path.getsize(final_mp4)/1024/1024:.2f} MB)", flush=True)
+    print(f"HOÀN TẤT VIDEO RƯỢT ĐUỔI PARKOUR 3D: {final_mp4} ({os.path.getsize(final_mp4)/1024/1024:.2f} MB)", flush=True)
 
 
 if __name__ == "__main__":
