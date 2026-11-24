@@ -13,7 +13,7 @@ import torch
 import trimesh
 from PIL import Image
 
-for _pkg in ("pytorch_lightning", "fast_simplification", "pybind11"):
+for _pkg in ("pytorch_lightning", "fast_simplification", "pybind11", "spandrel"):
     try:
         __import__(_pkg)
     except ImportError:
@@ -89,8 +89,33 @@ except ImportError:
 
 
 class _DummyModel:
+    _sr_model = None
+    _sr_tried = False
+
     def __init__(self, *args, **kwargs):
         pass
+
+    @classmethod
+    def _get_sr_model(cls):
+        if cls._sr_tried:
+            return cls._sr_model
+        cls._sr_tried = True
+        try:
+            import urllib.request
+            from spandrel import ModelLoader
+            ckpt_dir = "/content/Hunyuan3D-2.1/hy3dpaint/ckpt"
+            os.makedirs(ckpt_dir, exist_ok=True)
+            ckpt_path = os.path.join(ckpt_dir, "RealESRGAN_x4plus.pth")
+            if not os.path.exists(ckpt_path):
+                url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+                print("-> Đang tải RealESRGAN_x4plus.pth để tăng nét texture 4x...", flush=True)
+                urllib.request.urlretrieve(url, ckpt_path)
+            cls._sr_model = ModelLoader().load_from_file(ckpt_path).eval()
+            print("-> Đã nạp AI Super-Resolution RealESRGAN_x4plus (spandrel)!", flush=True)
+        except Exception as e:
+            print(f"⚠️ Không nạp được RealESRGAN_x4plus ({e}), dùng LANCZOS4 fallback.", flush=True)
+            cls._sr_model = None
+        return cls._sr_model
 
     def enhance(self, img, outscale=4, **kwargs):
         scale = float(outscale) if outscale else 1.0
@@ -99,6 +124,24 @@ class _DummyModel:
         if isinstance(img, np.ndarray):
             import cv2
             h, w = img.shape[:2]
+            sr = self._get_sr_model()
+            if sr is not None and img.ndim == 3 and img.shape[2] == 3:
+                try:
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    sr = sr.to(device)
+                    rgb = img[:, :, ::-1].astype(np.float32) / 255.0
+                    t = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).to(device)
+                    with torch.no_grad():
+                        out = sr(t).clamp(0.0, 1.0)[0].permute(1, 2, 0).cpu().numpy()
+                    sr.to("cpu")
+                    torch.cuda.empty_cache()
+                    out_bgr = (out[:, :, ::-1] * 255.0).round().astype(np.uint8)
+                    th, tw = int(round(h * scale)), int(round(w * scale))
+                    if out_bgr.shape[0] != th or out_bgr.shape[1] != tw:
+                        out_bgr = cv2.resize(out_bgr, (tw, th), interpolation=cv2.INTER_LANCZOS4)
+                    return out_bgr, None
+                except Exception:
+                    torch.cuda.empty_cache()
             up = cv2.resize(img, (int(round(w * scale)), int(round(h * scale))), interpolation=cv2.INTER_LANCZOS4)
             return up, None
         if isinstance(img, Image.Image):
@@ -186,18 +229,34 @@ from hy3dshape.rembg import BackgroundRemover
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 
 
+def _pad_to_square(rgba_img, size=1024, margin=0.08):
+    """Căn giữa nhân vật vào khung vuông 1024x1024 để Shape và Paint khớp góc chiếu 100%."""
+    bbox = rgba_img.getbbox()
+    if bbox:
+        rgba_img = rgba_img.crop(bbox)
+    w, h = rgba_img.size
+    inner = int(size * (1.0 - 2.0 * margin))
+    scale = min(inner / max(1, w), inner / max(1, h))
+    nw, nh = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+    resized = rgba_img.resize((nw, nh), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.paste(resized, ((size - nw) // 2, (size - nh) // 2), resized)
+    return canvas
+
+
 def main():
     raw_glb = "/content/Test/assets/models_3d/hoa_do_raw.glb"
-    shape_obj = "/content/Test/assets/models_3d/hoa_do_shape.obj"
+    shape_obj = "/content/Test/assets/models_3d/hoa_do_shape_sq.obj"
     apose_png = "/content/Test/assets/apose_inputs/hoa_do_apose.png"
     os.makedirs("/content/Test/assets/models_3d", exist_ok=True)
     if os.path.exists(raw_glb) and os.path.getmtime(raw_glb) >= os.path.getmtime(apose_png):
         print("Skip (đã có):", raw_glb, flush=True)
         return
 
-    print("1/3 Đang tách nền ảnh A-Pose...", flush=True)
+    print("1/3 Đang tách nền & căn vuông 1024x1024 ảnh A-Pose...", flush=True)
     img = Image.open(apose_png).convert("RGBA")
     img = BackgroundRemover()(img)
+    img = _pad_to_square(img, size=1024, margin=0.08)
     clean_png = "/content/Test/assets/models_3d/hoa_do_clean.png"
     img.save(clean_png)
 
@@ -214,19 +273,40 @@ def main():
         mesh = trimesh.load(shape_obj)
 
     vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3) if torch.cuda.is_available() else 0
-    num_views = 4 if vram_gb < 18 else 6
-    print(f"3/3 Đang tô màu PBR 3D (Hunyuan3D Paint | VRAM={vram_gb:.1f}GB | views={num_views})...", flush=True)
+    paint_res = 768 if vram_gb >= 32 else 512
+    num_views = 6
+    print(f"3/3 Đang tô màu PBR 3D (Hunyuan3D Paint | VRAM={vram_gb:.1f}GB | views={num_views} | res={paint_res})...", flush=True)
     try:
         import inspect
         from textureGenPipeline import Hunyuan3DPaintPipeline, Hunyuan3DPaintConfig
-        conf = Hunyuan3DPaintConfig(max_num_view=num_views, resolution=512)
-        paint_pipe = Hunyuan3DPaintPipeline(conf)
+        try:
+            conf = Hunyuan3DPaintConfig(max_num_view=num_views, resolution=paint_res)
+            paint_pipe = Hunyuan3DPaintPipeline(conf)
+        except torch.cuda.OutOfMemoryError:
+            gc.collect()
+            torch.cuda.empty_cache()
+            num_views, paint_res = 4, 512
+            print("⚠️ VRAM không đủ cho 6 góc, hạ xuống 4 góc @ 512...", flush=True)
+            conf = Hunyuan3DPaintConfig(max_num_view=num_views, resolution=paint_res)
+            paint_pipe = Hunyuan3DPaintPipeline(conf)
         sig = inspect.signature(paint_pipe.__call__).parameters
         painted_obj = "/content/Test/assets/models_3d/hoa_do_painted.obj"
-        if "mesh_path" in sig:
-            out_res = paint_pipe(mesh_path=shape_obj, image_path=clean_png, output_mesh_path=painted_obj)
-        else:
-            out_res = paint_pipe(shape_obj, clean_png)
+        try:
+            if "mesh_path" in sig:
+                out_res = paint_pipe(mesh_path=shape_obj, image_path=clean_png, output_mesh_path=painted_obj)
+            else:
+                out_res = paint_pipe(shape_obj, clean_png)
+        except torch.cuda.OutOfMemoryError:
+            del paint_pipe
+            gc.collect()
+            torch.cuda.empty_cache()
+            print("⚠️ OOM khi tô 6 góc trên GPU nhỏ, thử lại 4 góc @ 512...", flush=True)
+            conf = Hunyuan3DPaintConfig(max_num_view=4, resolution=512)
+            paint_pipe = Hunyuan3DPaintPipeline(conf)
+            if "mesh_path" in sig:
+                out_res = paint_pipe(mesh_path=shape_obj, image_path=clean_png, output_mesh_path=painted_obj)
+            else:
+                out_res = paint_pipe(shape_obj, clean_png)
 
         out_path = out_res if isinstance(out_res, str) and os.path.exists(out_res) else painted_obj
         painted_glb = os.path.splitext(out_path)[0] + ".glb"

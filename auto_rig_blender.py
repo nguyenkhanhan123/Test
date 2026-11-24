@@ -232,11 +232,14 @@ bpy.ops.export_scene.gltf(
 print("Exported rigged GLB:", out_glb)
 
 if out_mp4:
-    # Add lighting + orbiting camera for demo render
+    # Add studio 3-point lighting so face & front chest colors are crisp and even
     bpy.ops.object.light_add(type="SUN", location=(3, -4, 5))
-    bpy.context.active_object.data.energy = 3.5
+    bpy.context.active_object.data.energy = 2.5
+    bpy.ops.object.light_add(type="AREA", location=(0, -3.6, 1.5), rotation=(math.radians(82), 0, 0))
+    bpy.context.active_object.data.energy = 110.0
+    bpy.context.active_object.data.size = 2.5
     bpy.ops.object.light_add(type="AREA", location=(-3, -2, 3))
-    bpy.context.active_object.data.energy = 120.0
+    bpy.context.active_object.data.energy = 90.0
 
     bpy.ops.object.camera_add(location=(0, -4.5, 0.95), rotation=(math.radians(88), 0, 0))
     cam = bpy.context.active_object
