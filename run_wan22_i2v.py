@@ -90,7 +90,31 @@ def main():
     print(f"1/3 Đang nạp model {model_id}...", flush=True)
     vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
     pipe = WanImageToVideoPipeline.from_pretrained(model_id, vae=vae, torch_dtype=dtype)
-    pipe.enable_model_cpu_offload()
+
+    if vram_gb < 22:
+        print("-> GPU <22GB (T4): bật Group Offloading theo khối để giảm VRAM xuống ~6GB...", flush=True)
+        from diffusers.hooks.group_offloading import apply_group_offloading
+        onload_dev = torch.device("cuda")
+        offload_dev = torch.device("cpu")
+        apply_group_offloading(
+            pipe.text_encoder,
+            onload_device=onload_dev,
+            offload_device=offload_dev,
+            offload_type="block_level",
+            num_blocks_per_group=4,
+            low_cpu_mem_usage=True,
+        )
+        pipe.transformer.enable_group_offload(
+            onload_device=onload_dev,
+            offload_device=offload_dev,
+            offload_type="block_level",
+            num_blocks_per_group=2,
+            low_cpu_mem_usage=True,
+        )
+        pipe.vae.to(onload_dev)
+    else:
+        pipe.enable_model_cpu_offload()
+
     pipe.vae.enable_slicing()
     pipe.vae.enable_tiling()
 
