@@ -25,7 +25,8 @@ def download_mixamo_assets(work_dir):
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if os.path.exists(data.get("hero_fbx", "")) and os.path.exists(data.get("enemy_fbx", "")) and len(data.get("anims", {})) >= 5:
+        hero_ok = os.path.exists(data.get("hero_fbx", "")) and "remy" not in data.get("hero_fbx", "").lower()
+        if hero_ok and os.path.exists(data.get("enemy_fbx", "")) and len(data.get("anims", {})) >= 5:
             print("Dùng lại bộ nhân vật & Motion Capture Mixamo đã tải sẵn!", flush=True)
             return data
 
@@ -64,8 +65,8 @@ def download_mixamo_assets(work_dir):
                 return f
         return None
 
-    hero_remote = pick_char(["remy", "david", "douglas", "leonard", "adam", "brian", "liam", "malcolm", "james", "bryce", "ch31", "ch17", "ch14"])
-    enemy_remote = pick_char(["swat", "soldier", "malcolm", "douglas", "leonard", "brian", "david", "josh", "pete", "ch15", "ch33", "vanguard"], exclude=hero_remote)
+    hero_remote = pick_char(["david", "douglas", "leonard", "adam", "james", "brian", "malcolm", "bryce", "ch14", "ch17", "ch31"])
+    enemy_remote = pick_char(["swat", "soldier", "malcolm", "douglas", "leonard", "brian", "david", "josh", "pete", "ch15", "ch33"], exclude=hero_remote)
     if not hero_remote or not enemy_remote:
         raise RuntimeError(f"Không tìm thấy đủ 2 file nhân vật FBX trong {repo_id}.")
 
@@ -226,15 +227,18 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
         act.name = f"Mocap_{clip_key}"
         act.use_fake_user = True
 
-        # Khóa trượt ngang (X, Y) của xương Hips tại frame đầu để nhân vật KHÔNG trôi ra khỏi sân đấu,
-        # nhưng GIỮ NGUYÊN 100% độ cao Z & mọi chuyển động chân/eo/tay/đầu để chân bám chặt mặt đất!
+        # Xóa toàn bộ fcurve scale (tránh FBX anim tự phóng to/thu nhỏ nhân vật thành người khổng lồ!)
+        for fc in list(act.fcurves):
+            if fc.data_path.endswith("scale"):
+                act.fcurves.remove(fc)
+
+        # Khóa trượt ngang (X, Z) của xương Hips tại frame đầu để nhân vật KHÔNG trôi ra khỏi sân đấu,
+        # nhưng GIỮ NGUYÊN 100% độ cao Y & mọi chuyển động chân/eo/tay/đầu để chân bám chặt mặt đất!
         for fc in act.fcurves:
             if "hips" in fc.data_path.lower() and fc.data_path.endswith("location") and fc.array_index in (0, 2):
-                # Trong Mixamo FBX, index 0 = X ngang, index 2 = Z tiến/lùi (index 1 = Y độ cao thẳng đứng!)
                 if fc.keyframe_points:
                     base_v = fc.keyframe_points[0].co.y
                     for kp in fc.keyframe_points:
-                        # Giữ lại 25% nhịp bước tự nhiên để đòn đánh có lực nhưng không trôi mất
                         kp.co.y = base_v + (kp.co.y - base_v) * 0.25
                         kp.handle_left.y = base_v + (kp.handle_left.y - base_v) * 0.25
                         kp.handle_right.y = base_v + (kp.handle_right.y - base_v) * 0.25
@@ -260,21 +264,24 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
         if arm.animation_data:
             arm.animation_data.action = None
 
-        # Chuẩn hóa chiều cao đúng 1.78m đứng chạm sàn Z=0
+        # Chuẩn hóa chiều cao ĐÚNG 1.78m đứng trên Z=0 bằng root_empty (không phá tỷ lệ xương bên trong!)
         bpy.context.view_layer.update()
         pts = []
         for m in meshes:
             pts.extend(m.matrix_world @ Vector(c) for c in m.bound_box)
         min_z = min(v.z for v in pts)
         max_z = max(v.z for v in pts)
-        sc = 1.78 / max(0.2, max_z - min_z)
+        raw_h = max(0.05, max_z - min_z)
+        sc = 1.78 / raw_h
 
         root_empty = bpy.data.objects.new(f"{name}_Root", None)
         scene.collection.objects.link(root_empty)
         for r in roots:
-            r.scale = (r.scale.x * sc, r.scale.y * sc, r.scale.z * sc)
-            r.location.z -= min_z * sc
             r.parent = root_empty
+            r.location.z -= min_z
+        root_empty.scale = (sc, sc, sc)
+        bpy.context.view_layer.update()
+        print(f"[{name}] Normalized height: {raw_h:.2f}m -> 1.78m (scale={sc:.4f})", flush=True)
 
         for m in meshes:
             bpy.context.view_layer.objects.active = m
@@ -493,6 +500,11 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     scene.cycles.use_adaptive_sampling = True
     scene.cycles.adaptive_threshold = 0.08
     print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Adaptive 12 samples | Denoise=OFF", flush=True)
+
+    # Ép lại FPS = 24 SAU KHI import FBX (vì import_scene.fbx hay tự đổi FPS sang 30 -> 1440/30 = 48s!)
+    scene.render.fps = FPS
+    scene.frame_start = 1
+    scene.frame_end = TOTAL_FRAMES
 
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
