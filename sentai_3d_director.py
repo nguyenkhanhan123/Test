@@ -311,36 +311,48 @@ def run_blender_mocap_fight(manifest_path, out_raw_mp4):
     enemy_root.location = (0.0, 0.78, 0.0)
     enemy_root.rotation_euler = (0.0, 0.0, 0.0)
 
-    # --- 4. GHÉP CHUỖI MOTION CAPTURE VÕ THUẬT THẬT BẰNG BLENDER NLA (60 GIÂY = 1440 FRAMES) ---
+    # --- 4. GHÉP CHUỖI MOTION CAPTURE VÕ THUẬT THẬT BẰNG BLENDER NLA (2 TRACK XEN KẼ ĐỂ CROSSFADE MƯỢT!) ---
     def schedule_nla(arm, sequence):
-        """Nối liên tiếp các clip Motion Capture thật trên NLA với chuyển cảnh mượt (blend_in=6 frame)."""
-        track = arm.animation_data.nla_tracks.new()
-        track.name = "MartialArts_Mocap"
+        """Xen kẽ 2 NLA track (A/B) để chuyển cảnh mượt 6 frame giữa các đòn võ thật mà không bao giờ trùng track."""
+        track_a = arm.animation_data.nla_tracks.new()
+        track_a.name = "Mocap_Track_A"
+        track_b = arm.animation_data.nla_tracks.new()
+        track_b.name = "Mocap_Track_B"
+        tracks = [track_a, track_b]
         cur_frame = 1
         impact_frames = []
 
-        for clip_key, is_attack in sequence:
+        for idx_s, (clip_key, is_attack) in enumerate(sequence):
             if clip_key not in mocap_actions:
                 clip_key = next(iter(mocap_actions.keys()))
             act, f_len = mocap_actions[clip_key]
             if cur_frame > TOTAL_FRAMES:
                 break
-            strip = track.strips.new(f"{clip_key}_{cur_frame}", start=cur_frame, action=act)
+            tr = tracks[idx_s % 2]
+            # Đảm bảo không chạm strip trước đó trên cùng track
+            if tr.strips:
+                cur_frame = max(cur_frame, int(math.ceil(tr.strips[-1].frame_end)) + 1)
+            strip = tr.strips.new(f"{clip_key}_{cur_frame}", start=cur_frame, action=act)
             strip.blend_type = "REPLACE"
-            strip.extrapolation = "HOLD_FORWARD"
-            strip.blend_in = min(6, f_len // 4)
+            strip.extrapolation = "NOTHING" if idx_s < len(sequence) - 1 else "HOLD_FORWARD"
+            strip.blend_in = min(6, max(1, f_len // 5))
             strip.blend_out = 0
             if is_attack:
                 impact_frames.append(cur_frame + int(f_len * 0.45))
             cur_frame += max(18, f_len - 5)
 
-        # Lấp nốt tới frame 1440 bằng idle/knockdown cuối cùng
+        # Lấp nốt tới frame 1440 bằng clip cuối cùng trên track còn trống
         if cur_frame <= TOTAL_FRAMES:
             last_key = sequence[-1][0] if sequence[-1][0] in mocap_actions else next(iter(mocap_actions.keys()))
             act, f_len = mocap_actions[last_key]
-            strip = track.strips.new(f"hold_{cur_frame}", start=cur_frame, action=act)
-            strip.repeat = max(1.0, (TOTAL_FRAMES - cur_frame + 10) / max(1, f_len))
-            strip.blend_in = 6
+            tr = tracks[len(sequence) % 2]
+            if tr.strips:
+                cur_frame = max(cur_frame, int(math.ceil(tr.strips[-1].frame_end)) + 1)
+            if cur_frame <= TOTAL_FRAMES:
+                strip = tr.strips.new(f"hold_{cur_frame}", start=cur_frame, action=act)
+                strip.extrapolation = "HOLD_FORWARD"
+                strip.repeat = max(1.0, (TOTAL_FRAMES - cur_frame + 10) / max(1, f_len))
+                strip.blend_in = 6
         return impact_frames
 
     # Biên đạo đối kháng ăn khớp giữa Hỏa Đỏ (tấn công/phản công) và Mạc Khiêu (đỡ/trúng đòn/phản công/gục ngã)
@@ -536,8 +548,16 @@ def synth_dialogue_lines(tmp_dir):
         async def _gen():
             for i, (t_sec, voice, rate, pitch, text) in enumerate(lines):
                 mp3 = os.path.join(tmp_dir, f"line_{i:02d}.mp3")
-                comm = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
-                await comm.save(mp3)
+                try:
+                    comm = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
+                    await comm.save(mp3)
+                except Exception:
+                    try:
+                        comm = edge_tts.Communicate(text, voice=voice)
+                        await comm.save(mp3)
+                    except Exception as e2:
+                        print(f"  Bỏ qua câu {i}: {e2}", flush=True)
+                        continue
                 out_items.append((t_sec, mp3))
 
         asyncio.run(_gen())
