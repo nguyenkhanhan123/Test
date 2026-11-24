@@ -82,27 +82,63 @@ def main():
     os.makedirs("/content/Test/build_output", exist_ok=True)
 
     vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3) if torch.cuda.is_available() else 0
+    ram_gb = (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3)) if hasattr(os, "sysconf") else 32.0
     use_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
     dtype = torch.bfloat16 if use_bf16 else torch.float16
-    print(f"GPU VRAM: {vram_gb:.1f} GB | dtype={dtype}", flush=True)
+    print(f"GPU VRAM: {vram_gb:.1f} GB | System RAM: {ram_gb:.1f} GB | dtype={dtype}", flush=True)
 
     model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
-    print(f"1/3 Đang nạp model {model_id}...", flush=True)
-    vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
-    pipe = WanImageToVideoPipeline.from_pretrained(model_id, vae=vae, torch_dtype=dtype)
+    prompt = (
+        "Cinematic live-action Japanese Tokusatsu Super Sentai movie scene. "
+        "The heroic young Vietnamese warrior in the red and black A.E.G.I.S tactical jacket shifts smoothly "
+        "from standing into a powerful wide martial-arts fighting stance, clenching both hands tightly into fists. "
+        "Fiery crimson sparks and glowing embers swirl around his fists as he throws a sharp, decisive forward punch "
+        "with intense determination on his face. Dramatic low-angle cinematic camera slowly pushes in, "
+        "sharp focus, realistic 3D CGI lighting, fiery red rim light, ultra detailed, 24fps film look."
+    )
+    negative_prompt = (
+        "blurry, distorted face, melted face, extra fingers, deformed hands, bad anatomy, "
+        "static, low quality, worst quality, text, watermark, cartoon, flat lighting, flickering"
+    )
 
-    if vram_gb < 22:
-        print("-> GPU <22GB (T4): bật Group Offloading theo khối để giảm VRAM xuống ~6GB...", flush=True)
+    prompt_embeds = None
+    negative_prompt_embeds = None
+    low_ram_mode = (ram_gb < 28.0) or (vram_gb < 22.0)
+
+    if low_ram_mode:
+        print(f"1/3 Chế độ tiết kiệm RAM/VRAM ({ram_gb:.1f}GB RAM / {vram_gb:.1f}GB VRAM): mã hóa prompt trước rồi giải phóng Text Encoder...", flush=True)
         from diffusers.hooks.group_offloading import apply_group_offloading
         onload_dev = torch.device("cuda")
         offload_dev = torch.device("cpu")
+        enc_pipe = WanImageToVideoPipeline.from_pretrained(
+            model_id, transformer=None, vae=None, torch_dtype=dtype, low_cpu_mem_usage=True
+        )
         apply_group_offloading(
-            pipe.text_encoder,
+            enc_pipe.text_encoder,
             onload_device=onload_dev,
             offload_device=offload_dev,
             offload_type="block_level",
             num_blocks_per_group=4,
             low_cpu_mem_usage=True,
+        )
+        with torch.no_grad():
+            prompt_embeds, negative_prompt_embeds = enc_pipe.encode_prompt(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                do_classifier_free_guidance=True,
+                device=onload_dev,
+                dtype=dtype,
+            )
+            prompt_embeds = prompt_embeds.to("cpu")
+            negative_prompt_embeds = negative_prompt_embeds.to("cpu")
+        del enc_pipe
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        print("-> Đã giải phóng Text Encoder! Đang nạp Transformer + VAE...", flush=True)
+        vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
+        pipe = WanImageToVideoPipeline.from_pretrained(
+            model_id, text_encoder=None, vae=vae, torch_dtype=dtype, low_cpu_mem_usage=True
         )
         pipe.transformer.enable_group_offload(
             onload_device=onload_dev,
@@ -113,6 +149,9 @@ def main():
         )
         pipe.vae.to(onload_dev)
     else:
+        print(f"1/3 Đang nạp full model {model_id}...", flush=True)
+        vae = AutoencoderKLWan.from_pretrained(model_id, subfolder="vae", torch_dtype=torch.float32)
+        pipe = WanImageToVideoPipeline.from_pretrained(model_id, vae=vae, torch_dtype=dtype)
         pipe.enable_model_cpu_offload()
 
     pipe.vae.enable_slicing()
@@ -130,32 +169,25 @@ def main():
     print(f"2/3 Đang dựng ảnh gốc 16:9 ({width}x{height})...", flush=True)
     init_img = make_cinematic_keyframe(apose_png, keyframe_png, width=width, height=height)
 
-    prompt = (
-        "Cinematic live-action Japanese Tokusatsu Super Sentai movie scene. "
-        "The heroic young Vietnamese warrior in the red and black A.E.G.I.S tactical jacket shifts smoothly "
-        "from standing into a powerful wide martial-arts fighting stance, clenching both hands tightly into fists. "
-        "Fiery crimson sparks and glowing embers swirl around his fists as he throws a sharp, decisive forward punch "
-        "with intense determination on his face. Dramatic low-angle cinematic camera slowly pushes in, "
-        "sharp focus, realistic 3D CGI lighting, fiery red rim light, ultra detailed, 24fps film look."
-    )
-    negative_prompt = (
-        "blurry, distorted face, melted face, extra fingers, deformed hands, bad anatomy, "
-        "static, low quality, worst quality, text, watermark, cartoon, flat lighting, flickering"
-    )
-
     print(f"3/3 Đang render video AI Wan2.2 ({width}x{height}, {num_frames} frames, {steps} steps)...", flush=True)
     generator = torch.Generator(device="cuda").manual_seed(202605)
-    frames = pipe(
+    pipe_kwargs = dict(
         image=init_img,
-        prompt=prompt,
-        negative_prompt=negative_prompt,
         height=height,
         width=width,
         num_frames=num_frames,
         guidance_scale=5.0,
         num_inference_steps=steps,
         generator=generator,
-    ).frames[0]
+    )
+    if prompt_embeds is not None:
+        pipe_kwargs["prompt_embeds"] = prompt_embeds.to("cuda", dtype=dtype)
+        pipe_kwargs["negative_prompt_embeds"] = negative_prompt_embeds.to("cuda", dtype=dtype)
+    else:
+        pipe_kwargs["prompt"] = prompt
+        pipe_kwargs["negative_prompt"] = negative_prompt
+
+    frames = pipe(**pipe_kwargs).frames[0]
 
     export_to_video(frames, out_mp4, fps=24)
     gc.collect()
