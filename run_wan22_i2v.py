@@ -9,17 +9,22 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 
 def make_cinematic_keyframe(apose_path, out_path, width=1280, height=704):
-    """Đặt nhân vật Hỏa Đỏ từ ảnh A-Pose vào bối cảnh đấu trường Super Sentai 16:9 điện ảnh."""
+    """Đặt nhân vật Hỏa Đỏ từ ảnh A-Pose vào bối cảnh đấu trường Super Sentai 16:9 điện ảnh (0MB RAM phụ)."""
     src = Image.open(apose_path).convert("RGBA")
-    try:
-        from rembg import remove
-        fg = remove(src)
-    except Exception:
-        # Fallback tách nền trắng đơn giản nếu rembg chưa có
-        arr = np.array(src)
-        white = (arr[..., 0] > 240) & (arr[..., 1] > 240) & (arr[..., 2] > 240)
-        arr[white, 3] = 0
-        fg = Image.fromarray(arr, "RGBA")
+    arr = np.array(src)
+    # Ảnh A-Pose nền trắng sạch -> tách nền bằng flood-fill từ 4 góc (nhanh 0.05s, không tốn 1GB RAM cho rembg)
+    from scipy.ndimage import binary_dilation, label
+    near_white = (arr[..., 0] > 232) & (arr[..., 1] > 232) & (arr[..., 2] > 232)
+    labeled, _ = label(near_white)
+    border_labels = set(np.unique(np.concatenate([
+        labeled[0, :], labeled[-1, :], labeled[:, 0], labeled[:, -1]
+    ]))) - {0}
+    bg_mask = np.isin(labeled, list(border_labels))
+    # Làm mềm nhẹ viền 1px
+    edge = binary_dilation(bg_mask, iterations=1) & (~bg_mask)
+    arr[bg_mask, 3] = 0
+    arr[edge, 3] = 180
+    fg = Image.fromarray(arr, "RGBA")
 
     bbox = fg.getbbox()
     if bbox:
