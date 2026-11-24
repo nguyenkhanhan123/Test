@@ -534,14 +534,12 @@ def run_blender_martial_arts(hero_glb, enemy_glb, out_raw_mp4):
     except Exception:
         scene.cycles.device = "CPU"
 
-    # QUAN TRỌNG: TUYỆT ĐỐI KHÔNG dùng CPU OpenImageDenoise (tốn 25s/frame trên Colab 2-core CPU!)
-    if use_optix:
-        scene.cycles.use_denoising = True
-        scene.cycles.denoiser = "OPTIX"
-    else:
-        scene.cycles.use_denoising = False
-        scene.cycles.samples = 12
-    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Denoise={'OPTIX-GPU' if use_optix else 'OFF'}", flush=True)
+    # Tắt denoiser để tránh cả lỗi Failed to create OptiX denoiser lẫn nghẽn CPU 25s/frame trên Colab
+    scene.cycles.use_denoising = False
+    scene.cycles.samples = 12
+    scene.cycles.use_adaptive_sampling = True
+    scene.cycles.adaptive_threshold = 0.08
+    print(f"GPU đang dùng: {', '.join(gpu_names) if gpu_names else 'CPU'} | Adaptive 12 samples | Denoise=OFF", flush=True)
 
     scene.render.resolution_x = 1280
     scene.render.resolution_y = 720
