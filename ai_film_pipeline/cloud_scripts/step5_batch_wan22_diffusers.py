@@ -1,9 +1,8 @@
-"""Colab L4 (24GB/52GB RAM) & T4 (15GB/12.7GB RAM) Step 5 Video AI Generator.
+"""Colab L4 (24GB/52GB RAM) & T4 (15GB/13.6GB RAM) Step 5 Video AI Generator.
 
 - On L4 / A100 (>=20GB VRAM and >=24GB system RAM): runs ``Wan-AI/Wan2.2-TI2V-5B-Diffusers``.
-- On free/constrained T4 (12.7GB system RAM): automatically switches to lightweight
-  ``Lightricks/LTX-Video`` (2B) with 4-bit NF4 quantized T5 text encoder so it never
-  crashes Colab's 12.7 GB RAM limit.
+- On constrained T4 (13.6GB system RAM): automatically switches to ``stabilityai/stable-video-diffusion-img2vid-xt``
+  (``variant="fp16"``, ~4.5GB total, no 19GB T5 download) so it never hits T4 RAM OOM.
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ def get_hardware_tier() -> tuple[str, float, float]:
     ram_gb = get_system_ram_gb()
     if vram_gb >= 20.0 and ram_gb >= 24.0 and torch.cuda.is_bf16_supported():
         return "wan22_l4", vram_gb, ram_gb
-    return "ltx_t4_lowram", vram_gb, ram_gb
+    return "svd_xt_t4", vram_gb, ram_gb
 
 
 def _render_with_wan22_l4(base_dir: Path, pending: list[dict], steps: int) -> None:
@@ -83,65 +82,45 @@ def _render_with_wan22_l4(base_dir: Path, pending: list[dict], steps: int) -> No
         print(f"[SAVED] {out_mp4}")
 
 
-def _render_with_ltx_t4(base_dir: Path, pending: list[dict], steps: int) -> None:
-    from diffusers import LTXImageToVideoPipeline, LTXVideoTransformer3DModel
-    from transformers import BitsAndBytesConfig, T5EncoderModel
+def _render_with_svd_t4(base_dir: Path, pending: list[dict], steps: int) -> None:
+    from diffusers import StableVideoDiffusionPipeline
 
-    model_id = "Lightricks/LTX-Video"
+    model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
     out_dir = base_dir / "assets" / "video_ai"
-    print(f"[Cell 5] T4 / 12.7GB RAM mode -> loading {model_id} with 4-bit T5...")
+    print(f"[Cell 5] T4 / 13.6GB RAM mode -> loading {model_id} (variant=fp16)...")
 
-    bnb_cfg = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    )
-    text_encoder = T5EncoderModel.from_pretrained(
+    pipe = StableVideoDiffusionPipeline.from_pretrained(
         model_id,
-        subfolder="text_encoder",
-        quantization_config=bnb_cfg,
         torch_dtype=torch.float16,
-        low_cpu_mem_usage=True,
-    )
-    transformer = LTXVideoTransformer3DModel.from_pretrained(
-        model_id,
-        subfolder="transformer",
-        torch_dtype=torch.float16,
-        low_cpu_mem_usage=True,
-    )
-    pipe = LTXImageToVideoPipeline.from_pretrained(
-        model_id,
-        text_encoder=text_encoder,
-        transformer=transformer,
-        torch_dtype=torch.float16,
+        variant="fp16",
         low_cpu_mem_usage=True,
     )
     pipe.enable_model_cpu_offload()
-    pipe.vae.enable_tiling()
+    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
+        pipe.vae.enable_slicing()
+    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
+        pipe.vae.enable_tiling()
 
-    neg_prompt = "worst quality, inconsistent motion, blurry, jittery, distorted, static frame"
-    for shot in pending:
+    for idx, shot in enumerate(pending):
         shot_id = shot["shot_id"]
-        image = load_image(str(base_dir / shot["keyframe_path"])).resize((704, 384))
-        prompt = shot.get("motion_prompt") or shot["image_prompt"]
-        # LTX-Video requires 8*k + 1 frames (49 frames @ 24fps = 2.04s, fast & safe for 12.7GB RAM)
-        num_frames = 49
-
-        print(f"[LTX-Video] {shot_id} (704x384, {num_frames}f, {steps} steps)...")
+        image = load_image(str(base_dir / shot["keyframe_path"])).resize((1024, 576))
+        gen = torch.manual_seed(2026 + idx)
+        # Higher motion_bucket_id (175) yields stronger action motion for combat shots
+        print(f"[SVD-XT] Rendering {shot_id} (1024x576, 25 frames, motion=175)...")
         frames = pipe(
-            image=image,
-            prompt=prompt,
-            negative_prompt=neg_prompt,
-            width=704,
-            height=384,
-            num_frames=num_frames,
-            num_inference_steps=steps,
+            image,
+            decode_chunk_size=4,
+            generator=gen,
+            motion_bucket_id=175,
+            noise_aug_strength=0.04,
+            num_inference_steps=max(20, min(steps, 25)),
+            fps=8,
         ).frames[0]
         out_mp4 = out_dir / f"{shot_id}.mp4"
-        export_to_video(frames, str(out_mp4), fps=24)
+        export_to_video(frames, str(out_mp4), fps=8)
         print(f"[SAVED] {out_mp4}")
 
-    del pipe, transformer, text_encoder
+    del pipe
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -166,7 +145,7 @@ def render_wan22_action_shots(
     if tier == "wan22_l4":
         _render_with_wan22_l4(base_dir, pending, steps)
     else:
-        _render_with_ltx_t4(base_dir, pending, steps)
+        _render_with_svd_t4(base_dir, pending, steps)
 
 
 if __name__ == "__main__":
