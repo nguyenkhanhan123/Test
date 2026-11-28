@@ -82,12 +82,12 @@ def _render_with_wan22_l4(base_dir: Path, pending: list[dict], steps: int) -> No
         print(f"[SAVED] {out_mp4}")
 
 
-def _render_with_svd_t4(base_dir: Path, pending: list[dict], steps: int) -> None:
+def _render_with_svd_t4(base_dir: Path, pending: list[dict], steps: int, ram_gb: float) -> None:
     from diffusers import StableVideoDiffusionPipeline
 
     model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
     out_dir = base_dir / "assets" / "video_ai"
-    print(f"[Cell 5] T4 / 13.6GB RAM mode -> loading {model_id} (variant=fp16)...")
+    print(f"[Cell 5] T4 mode (RAM={ram_gb:.1f}GB) -> loading {model_id} (variant=fp16)...")
 
     pipe = StableVideoDiffusionPipeline.from_pretrained(
         model_id,
@@ -96,23 +96,27 @@ def _render_with_svd_t4(base_dir: Path, pending: list[dict], steps: int) -> None
         low_cpu_mem_usage=True,
     )
     pipe.enable_model_cpu_offload()
-    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
-        pipe.vae.enable_slicing()
-    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
-        pipe.vae.enable_tiling()
+    # AutoencoderKLTemporalDecoder raises NotImplementedError on slicing; decode_chunk_size handles VAE chunking
+    for method_name in ("enable_slicing", "enable_tiling"):
+        fn = getattr(getattr(pipe, "vae", None), method_name, None)
+        if fn is not None:
+            try:
+                fn()
+            except (AttributeError, NotImplementedError):
+                pass
 
     for idx, shot in enumerate(pending):
         shot_id = shot["shot_id"]
         image = load_image(str(base_dir / shot["keyframe_path"])).resize((1024, 576))
         gen = torch.manual_seed(2026 + idx)
-        # Higher motion_bucket_id (175) yields stronger action motion for combat shots
-        print(f"[SVD-XT] Rendering {shot_id} (1024x576, 25 frames, motion=175)...")
+        # Higher motion_bucket_id (185) yields stronger action motion for combat shots
+        print(f"[SVD-XT] Rendering {shot_id} (1024x576, 25 frames, motion=185)...")
         frames = pipe(
             image,
             decode_chunk_size=4,
             generator=gen,
-            motion_bucket_id=175,
-            noise_aug_strength=0.04,
+            motion_bucket_id=185,
+            noise_aug_strength=0.05,
             num_inference_steps=max(20, min(steps, 25)),
             fps=8,
         ).frames[0]
@@ -145,7 +149,7 @@ def render_wan22_action_shots(
     if tier == "wan22_l4":
         _render_with_wan22_l4(base_dir, pending, steps)
     else:
-        _render_with_svd_t4(base_dir, pending, steps)
+        _render_with_svd_t4(base_dir, pending, steps, ram_gb)
 
 
 if __name__ == "__main__":
