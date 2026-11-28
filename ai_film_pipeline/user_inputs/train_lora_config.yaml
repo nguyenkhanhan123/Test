@@ -1,0 +1,43 @@
+job: extension
+config:
+  name: "nv_minhkhang_lora_v1"
+  process:
+    - type: sd_trainer
+      training_folder: "D:/Tiktok/ai_film_pipeline/loras"
+      device: cuda:0
+      trigger_word: "nv_minhkhang"
+      network:
+        type: lora
+        linear: 32
+        linear_alpha: 32
+      save:
+        dtype: float16
+        save_every: 300
+        max_step_saves_to_keep: 3
+      datasets:
+        - folder_path: "D:/Tiktok/ai_film_pipeline/user_inputs/photos"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05
+          resolution: [512, 768, 1024]
+      train:
+        batch_size: 1
+        steps: 1200
+        gradient_accumulation_steps: 2
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        optimizer: adamw8bit
+        lr: 1e-4
+        lr_scheduler: constant
+        dtype: fp16
+      model:
+        # Un-gated SDXL base (works on T4/L4 immediately; swap to black-forest-labs/FLUX.1-dev + is_flux: true + quantize: true if HF logged in)
+        name_or_path: "stabilityai/stable-diffusion-xl-base-1.0"
+        is_v2: false
+        base_weights: null
+      sample:
+        prompt: "nv_minhkhang, dynamic martial arts combat stance in rain, dramatic crimson night lighting, anime film still"
+        width: 1024
+        height: 576
+        steps: 25
+        samples_every: 300
