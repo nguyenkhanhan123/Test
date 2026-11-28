@@ -120,6 +120,10 @@ def train_sdxl_lora(
         target_modules=["to_k", "to_q", "to_v", "to_out.0"],
     )
     unet.add_adapter(lora_cfg)
+    # Keep trainable LoRA weights in fp32 so GradScaler can unscale gradients on T4 (fp16)
+    for p in unet.parameters():
+        if p.requires_grad:
+            p.data = p.data.float()
     trainable = [p for p in unet.parameters() if p.requires_grad]
 
     try:
@@ -183,6 +187,7 @@ def train_sdxl_lora(
     from diffusers import StableDiffusionXLPipeline
 
     unet_lora_sd = convert_state_dict_to_diffusers(get_peft_model_state_dict(unet))
+    unet_lora_sd = {k: v.to(weight_dtype) for k, v in unet_lora_sd.items()}
     StableDiffusionXLPipeline.save_lora_weights(
         save_directory=str(output_dir),
         unet_lora_layers=unet_lora_sd,

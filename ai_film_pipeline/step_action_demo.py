@@ -508,7 +508,7 @@ def main() -> None:
     args = parser.parse_args()
     base_dir = Path(__file__).resolve().parent
     script_path = base_dir / "script_action_demo.json"
-    if not args.skip_tts or not script_path.exists():
+    if (not args.skip_tts and not args.tts_only) or not script_path.exists():
         ep = build_action_demo_script()
         script_path.write_text(ep.model_dump_json(indent=2), encoding="utf-8")
     if args.tts_only:
