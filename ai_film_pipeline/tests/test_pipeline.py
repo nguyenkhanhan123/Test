@@ -32,6 +32,11 @@ def test_emotion_voice_and_action_schema() -> None:
 
     nb = json.loads(nb_path.read_text(encoding="utf-8"))
     assert nb["nbformat"] == 4 and len(nb["cells"]) >= 5
+    import py_compile
+
+    cloud_dir = Path(__file__).resolve().parents[1] / "cloud_scripts"
+    py_compile.compile(str(cloud_dir / "train_sdxl_lora_peft.py"), doraise=True)
+    py_compile.compile(str(cloud_dir / "step5_batch_wan22_diffusers.py"), doraise=True)
 
 
 def test_subtitle_punctuation_and_chunking() -> None:

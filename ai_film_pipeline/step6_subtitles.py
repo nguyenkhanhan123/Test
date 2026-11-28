@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import pysubs2
@@ -30,7 +31,7 @@ def _configure_styles(subs: pysubs2.SSAFile, width: int, height: int) -> None:
     subs.info["ScaledBorderAndShadow"] = "yes"
     subs.info["WrapStyle"] = "1"
 
-    base_font = "Segoe UI"
+    base_font = "Segoe UI" if sys.platform.startswith("win") else "DejaVu Sans"
     base_size = max(26, int(round(height * 0.044)))  # ~32px at 720p
 
     narrator = pysubs2.SSAStyle(
