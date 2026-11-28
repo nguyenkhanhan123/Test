@@ -38,8 +38,12 @@ def generate_action_keyframes(base_dir: Path) -> None:
         low_cpu_mem_usage=True,
     )
     pipe.enable_model_cpu_offload()
-    pipe.enable_vae_slicing()
-    pipe.enable_attention_slicing()
+    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
+        pipe.vae.enable_slicing()
+    if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
+        pipe.vae.enable_tiling()
+    if hasattr(pipe, "enable_attention_slicing"):
+        pipe.enable_attention_slicing()
     pipe.load_lora_weights(str(Path(lora_files[-1]).parent), weight_name=Path(lora_files[-1]).name)
 
     prompts = {
