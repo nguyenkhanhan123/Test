@@ -1,4 +1,8 @@
-"""Colab T4/L4 Cell 3 Script: Generate Action Keyframes from Trained SDXL LoRA."""
+"""Colab T4/L4 Cell 3 Script: Generate Action Keyframes from Trained SDXL LoRA.
+
+Uses ``variant="fp16"``, ``low_cpu_mem_usage=True``, and ``enable_model_cpu_offload()``
+so SDXL fits well inside Colab T4's 12.7 GB system RAM without triggering Linux OOM.
+"""
 
 from __future__ import annotations
 
@@ -18,14 +22,24 @@ def generate_action_keyframes(base_dir: Path) -> None:
 
     vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9 if torch.cuda.is_available() else 0.0
     dtype = torch.bfloat16 if (vram_gb >= 20.0 and torch.cuda.is_bf16_supported()) else torch.float16
-    print(f"[Cell 3] Loading SDXL + LoRA ({Path(lora_files[-1]).name}) with dtype={dtype}...")
+    print(f"[Cell 3] Loading SDXL (variant=fp16, low_cpu_mem) + LoRA ({Path(lora_files[-1]).name})...")
 
-    vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=dtype)
+    vae = AutoencoderKL.from_pretrained(
+        "madebyollin/sdxl-vae-fp16-fix",
+        torch_dtype=dtype,
+        low_cpu_mem_usage=True,
+    )
     pipe = StableDiffusionXLPipeline.from_pretrained(
         "stabilityai/stable-diffusion-xl-base-1.0",
         vae=vae,
         torch_dtype=dtype,
-    ).to("cuda")
+        variant="fp16",
+        use_safetensors=True,
+        low_cpu_mem_usage=True,
+    )
+    pipe.enable_model_cpu_offload()
+    pipe.enable_vae_slicing()
+    pipe.enable_attention_slicing()
     pipe.load_lora_weights(str(Path(lora_files[-1]).parent), weight_name=Path(lora_files[-1]).name)
 
     prompts = {
@@ -53,7 +67,7 @@ def generate_action_keyframes(base_dir: Path) -> None:
                 negative_prompt=neg_prompt,
                 width=1024,
                 height=576,
-                num_inference_steps=28,
+                num_inference_steps=26,
                 guidance_scale=7.0,
             ).images[0]
             out_img = out_dir / f"{sid}.png"
