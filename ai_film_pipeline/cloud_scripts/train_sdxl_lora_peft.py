@@ -57,7 +57,8 @@ def train_sdxl_lora(
 ) -> Path:
     torch.manual_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    weight_dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float16
+    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9 if torch.cuda.is_available() else 0.0
+    weight_dtype = torch.bfloat16 if (vram_gb >= 20.0 and torch.cuda.is_bf16_supported()) else torch.float16
     output_dir.mkdir(parents=True, exist_ok=True)
 
     images = sorted(p for p in dataset_dir.iterdir() if p.is_file() and p.suffix.lower() in IMAGE_EXTS)

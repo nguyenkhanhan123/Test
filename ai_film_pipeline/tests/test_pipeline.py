@@ -36,6 +36,7 @@ def test_emotion_voice_and_action_schema() -> None:
 
     cloud_dir = Path(__file__).resolve().parents[1] / "cloud_scripts"
     py_compile.compile(str(cloud_dir / "train_sdxl_lora_peft.py"), doraise=True)
+    py_compile.compile(str(cloud_dir / "step4_gen_keyframes_lora.py"), doraise=True)
     py_compile.compile(str(cloud_dir / "step5_batch_wan22_diffusers.py"), doraise=True)
 
 
